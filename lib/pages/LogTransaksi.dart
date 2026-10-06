@@ -165,8 +165,6 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
     final filteredList = _selectedFilter == 'Semua'
         ? _allTransactions
         : _allTransactions
@@ -219,23 +217,8 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                               child: _buildTransactionCard(trx),
                             )),
 
-                        const SizedBox(height: 12),
-
                         // Validasi Akhir Shift Section
                         _buildValidasiShiftSection(),
-                        const SizedBox(height: 20),
-
-                        // Bottom Home Indicator Pill
-                        Center(
-                          child: Container(
-                            width: screenSize.width * 0.38,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
                         const SizedBox(height: 12),
                       ],
                     ),
@@ -380,7 +363,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                     Icon(Icons.circle, color: textDark, size: 6),
                     SizedBox(width: 5),
                     Text(
-                      'Shift Pagi - Sore',
+                      'Shift Pagi',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -412,7 +395,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
               Icon(Icons.check_circle_outline_rounded, size: 15, color: subTextGrey),
               SizedBox(width: 5),
               Text(
-                '32 Transaksi Selesai · 0 Dibatalkan',
+                '32 Transaksi Selesai',
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,

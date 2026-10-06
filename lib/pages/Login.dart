@@ -109,8 +109,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: bgYellow,
       body: Stack(
@@ -396,21 +394,7 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // 7. Home Indicator bar (white pill at bottom)
-                  Center(
-                    child: Container(
-                      width: screenSize.width * 0.38,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
                 ],
               ),
             ),

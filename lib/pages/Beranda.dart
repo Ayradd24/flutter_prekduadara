@@ -41,6 +41,15 @@ class _BerandaPageState extends State<BerandaPage> {
     );
   }
 
+  void _removeItem(String name) {
+    setState(() {
+      final current = _itemCounts[name] ?? 0;
+      if (current > 0) {
+        _itemCounts[name] = current - 1;
+      }
+    });
+  }
+
   String _formatRupiah(int amount) {
     return 'Rp ${amount.toString().replaceAllMapped(
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
@@ -50,8 +59,6 @@ class _BerandaPageState extends State<BerandaPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgYellow,
@@ -112,19 +119,10 @@ class _BerandaPageState extends State<BerandaPage> {
                           imageUrl:
                               'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&q=80',
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 16),
 
-                        // Bottom Home Indicator Pill
-                        Center(
-                          child: Container(
-                            width: screenSize.width * 0.38,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
+                        // Tombol Konfirmasi dan Bayar
+                        _buildConfirmPayButton(),
                         const SizedBox(height: 12),
                       ],
                     ),
@@ -549,12 +547,12 @@ class _BerandaPageState extends State<BerandaPage> {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w800,
                     color: textDark,
                     height: 1.2,
                   ),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
@@ -572,7 +570,7 @@ class _BerandaPageState extends State<BerandaPage> {
                 Text(
                   _formatRupiah(price),
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w900,
                     color: textDark,
                   ),
@@ -581,39 +579,149 @@ class _BerandaPageState extends State<BerandaPage> {
             ),
           ),
 
-          // Count & Add (+) Button
+          const SizedBox(width: 8),
+
+          // Count & Controls (Minus if count > 0, Count, Plus)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '$count',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: textDark,
+              if (count > 0) ...[
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _removeItem(title),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFD1D5DB)),
+                    ),
+                    child: const Icon(
+                      Icons.remove,
+                      color: textDark,
+                      size: 16,
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: textDark,
+                    ),
+                  ),
+                ),
+              ],
               InkWell(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(8),
                 onTap: () => _addItem(title, price),
                 child: Container(
-                  width: 38,
-                  height: 38,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     color: Colors.black,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.add,
                     color: Colors.white,
-                    size: 20,
+                    size: 16,
                   ),
                 ),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // --- Confirm & Pay Button ---
+  Widget _buildConfirmPayButton() {
+    final totalCount = _itemCounts.values.fold(0, (sum, count) => sum + count);
+    int totalPrice = 0;
+    totalPrice += (_itemCounts['Ayam Geprek Bakar + Es Teh'] ?? 0) * 18000;
+    totalPrice += (_itemCounts['Ayam Geprek Biasa + Es Teh'] ?? 0) * 17000;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: primaryGreen.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TransaksiPage(
+                initialItemCounts: _itemCounts,
+              ),
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryGreen,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          elevation: 0,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'KONFIRMASI & BAYAR',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    if (totalCount > 0)
+                      Text(
+                        '$totalCount Item · ${_formatRupiah(totalPrice)}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFD1FAE5),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            const Icon(
+              Icons.arrow_forward_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
