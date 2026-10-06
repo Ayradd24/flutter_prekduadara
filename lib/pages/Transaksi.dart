@@ -45,7 +45,8 @@ class OrderItem {
 }
 
 class TransaksiPage extends StatefulWidget {
-  const TransaksiPage({super.key});
+  final Map<String, int>? initialItemCounts;
+  const TransaksiPage({super.key, this.initialItemCounts});
 
   @override
   State<TransaksiPage> createState() => _TransaksiPageState();
@@ -53,14 +54,29 @@ class TransaksiPage extends StatefulWidget {
 
 class _TransaksiPageState extends State<TransaksiPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String _selectedCategory = 'Semua';
   String _paymentMethod = 'Tunai';
 
-  final List<String> _categories = [
-    'Semua',
-    'Geprek Bakar',
-    'Geprek Biasa',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialItemCounts != null) {
+      widget.initialItemCounts!.forEach((title, count) {
+        if (count > 0) {
+          final items = _allMenuItems.where((m) => m.title == title);
+          if (items.isNotEmpty) {
+            final item = items.first;
+            _orderedItems.add(
+              OrderItem(
+                menuItem: item,
+                quantity: count,
+                note: item.defaultNote,
+              ),
+            );
+          }
+        }
+      });
+    }
+  }
 
   final List<MenuItemData> _allMenuItems = [
     MenuItemData(
@@ -112,49 +128,6 @@ class _TransaksiPageState extends State<TransaksiPage> {
 
   int get _tax => (_subtotal * 0.1).round();
   int get _grandTotal => _subtotal + _tax;
-
-  void _addMenuItem(MenuItemData item) {
-    setState(() {
-      final index = _orderedItems.indexWhere((o) => o.menuItem.id == item.id);
-      if (index >= 0) {
-        _orderedItems[index].quantity += 1;
-      } else {
-        _orderedItems.add(
-          OrderItem(
-            menuItem: item,
-            quantity: 1,
-            note: item.defaultNote,
-          ),
-        );
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${item.title} ditambahkan ke pesanan!'),
-        duration: const Duration(milliseconds: 900),
-        backgroundColor: primaryGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  void _decrementOrderItem(int index) {
-    setState(() {
-      if (_orderedItems[index].quantity > 1) {
-        _orderedItems[index].quantity -= 1;
-      } else {
-        _orderedItems.removeAt(index);
-      }
-    });
-  }
-
-  void _incrementOrderItem(int index) {
-    setState(() {
-      _orderedItems[index].quantity += 1;
-    });
-  }
 
   void _showNoteDialog(OrderItem orderItem) {
     final controller = TextEditingController(text: orderItem.note);
@@ -465,12 +438,6 @@ class _TransaksiPageState extends State<TransaksiPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
-    final filteredMenu = _selectedCategory == 'Semua'
-        ? _allMenuItems
-        : _allMenuItems.where((m) => m.category == _selectedCategory).toList();
-
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgYellow,
@@ -501,29 +468,11 @@ class _TransaksiPageState extends State<TransaksiPage> {
                       children: [
                         // Pesanan Baru Title
                         _buildSubHeaderRow(),
-                        const SizedBox(height: 12),
-
-                        // Category Chips
-                        _buildCategoryFilter(),
                         const SizedBox(height: 14),
 
-                        // Section Header (Pilih Menu Populer / 24 Menu Tersedia)
-                        _buildSectionHeader(),
-                        const SizedBox(height: 10),
-
-                        // Menu Items List
-                        ...filteredMenu.map((item) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _buildMenuCard(item),
-                            )),
-
-                        const SizedBox(height: 4),
-
                         // Pesanan Card
-                        if (_orderedItems.isNotEmpty) ...[
-                          _buildPesananCard(),
-                          const SizedBox(height: 14),
-                        ],
+                        _buildPesananCard(),
+                        const SizedBox(height: 14),
 
                         // Payment Method Selector
                         _buildPaymentMethodSelector(),
@@ -541,17 +490,6 @@ class _TransaksiPageState extends State<TransaksiPage> {
                         _buildPrinterStatus(),
                         const SizedBox(height: 20),
 
-                        // Bottom Home Indicator Pill
-                        Center(
-                          child: Container(
-                            width: screenSize.width * 0.38,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
                         const SizedBox(height: 12),
                       ],
                     ),
@@ -610,266 +548,6 @@ class _TransaksiPageState extends State<TransaksiPage> {
           ),
         ),
       ],
-    );
-  }
-
-  // --- Category Filter Chips ---
-  Widget _buildCategoryFilter() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: _categories.map((cat) {
-          final isSelected = _selectedCategory == cat;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: InkWell(
-              onTap: () {
-                setState(() {
-                  _selectedCategory = cat;
-                });
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-                decoration: BoxDecoration(
-                  color: isSelected ? Colors.black : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? Colors.black : const Color(0xFFE5E7EB),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  cat,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
-                    color: isSelected ? Colors.white : const Color(0xFF374151),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  // --- Section Header: PILIH MENU POPULER ---
-  Widget _buildSectionHeader() {
-    return const Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          'PILIH MENU POPULER',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-            color: textDark,
-            letterSpacing: 0.5,
-          ),
-        ),
-        Text(
-          '2 Menu Tersedia',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF78350F),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // --- Menu Item Card ---
-  Widget _buildMenuCard(MenuItemData item) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Food Image
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: Image.network(
-                    item.imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: const Color(0xFFE5E7EB),
-                        child: const Icon(
-                          Icons.fastfood_rounded,
-                          color: Color(0xFF9CA3AF),
-                          size: 32,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Title & Price
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: textDark,
-                      ),
-                      maxLines: 2,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(
-                          _formatCurrency(item.price),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: textDark,
-                          ),
-                        ),
-                        if (item.originalPrice != null) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            _formatCurrency(item.originalPrice!),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF9CA3AF),
-                              decoration: TextDecoration.lineThrough,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // [+] Add Button
-              InkWell(
-                onTap: () => _addMenuItem(item),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.add,
-                    color: textDark,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Bottom Note Clickable Row (Entire area is clickable)
-          InkWell(
-            onTap: () {
-              final existingIndex = _orderedItems.indexWhere((o) => o.menuItem.id == item.id);
-              if (existingIndex >= 0) {
-                _showNoteDialog(_orderedItems[existingIndex]);
-              } else {
-                final newItem = OrderItem(
-                  menuItem: item,
-                  quantity: 1,
-                  note: '',
-                );
-                setState(() {
-                  _orderedItems.add(newItem);
-                });
-                _showNoteDialog(newItem);
-              }
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
-              child: Builder(
-                builder: (context) {
-                  final orderItem = _orderedItems.where((o) => o.menuItem.id == item.id).firstOrNull;
-                  final currentNote = (orderItem != null && orderItem.note.isNotEmpty)
-                      ? orderItem.note
-                      : null;
-
-                  return Row(
-                    children: [
-                      Icon(
-                        currentNote != null
-                            ? Icons.edit_note_rounded
-                            : Icons.add_comment_outlined,
-                        size: 16,
-                        color: currentNote != null ? primaryGreen : subTextGrey,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          currentNote != null
-                              ? 'Catatan: $currentNote'
-                              : 'Tambahkan catatan khusus...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: currentNote != null ? FontWeight.w700 : FontWeight.w500,
-                            color: currentNote != null ? textDark : subTextGrey,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const Icon(
-                        Icons.edit_outlined,
-                        size: 14,
-                        color: subTextGrey,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1044,103 +722,92 @@ class _TransaksiPageState extends State<TransaksiPage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Ordered Items List
-          ..._orderedItems.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final order = entry.value;
-
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Title & Price note
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          order.menuItem.title,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: textDark,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '@ ${_formatCurrency(order.menuItem.price)} · Lv 3',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: subTextGrey,
-                          ),
-                        ),
-                      ],
-                    ),
+          if (_orderedItems.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  'Belum ada menu yang dipilih',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: subTextGrey,
                   ),
+                ),
+              ),
+            )
+          else
+            // Ordered Items List
+            ..._orderedItems.map((order) {
 
-                  // Quantity Stepper: [-] 1 [+]
-                  Row(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF9FAFB),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
-                        ),
-                        child: Row(
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Title & Price note
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _showNoteDialog(order),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            InkWell(
-                              onTap: () => _decrementOrderItem(idx),
-                              borderRadius: const BorderRadius.horizontal(
-                                  left: Radius.circular(8)),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                child: Icon(Icons.remove,
-                                    size: 16, color: textDark),
+                            Text(
+                              order.menuItem.title,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: textDark,
                               ),
                             ),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 6),
-                              child: Text(
-                                '${order.quantity}',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: textDark,
-                                ),
-                              ),
-                            ),
-                            InkWell(
-                              onTap: () => _incrementOrderItem(idx),
-                              borderRadius: const BorderRadius.horizontal(
-                                  right: Radius.circular(8)),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                child:
-                                    Icon(Icons.add, size: 16, color: textDark),
+                            const SizedBox(height: 2),
+                            Text(
+                              '@ ${_formatCurrency(order.menuItem.price)}${order.note.isNotEmpty ? ' · ${order.note}' : ' · Lv 3'}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: subTextGrey,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _formatCurrency(order.totalPrice),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          color: textDark,
+                    ),
+
+                    // Quantity & Price
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          child: Text(
+                            '${order.quantity}x',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: textDark,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _formatCurrency(order.totalPrice),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: textDark,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             );
