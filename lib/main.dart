@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'database/app_database.dart';
 import 'pages/Login.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inisialisasi database lokal SQLite via Drift
+  try {
+    await AppDatabase.instance.seedInitialData();
+  } catch (e) {
+    debugPrint('Gagal inisialisasi database: $e');
+  }
+
   runApp(const MyApp());
 }
 

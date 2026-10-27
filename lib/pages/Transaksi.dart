@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../widget/app_drawer.dart';
+import 'Beranda.dart';
 
 // Palette warna konsisten tema PrekDuaDara
 const Color bgYellow = Color(0xFFFBBF24);
@@ -16,7 +17,6 @@ class MenuItemData {
   final String category;
   final int price;
   final int? originalPrice;
-  final String defaultNote;
   final String imageUrl;
 
   MenuItemData({
@@ -25,7 +25,6 @@ class MenuItemData {
     required this.category,
     required this.price,
     this.originalPrice,
-    required this.defaultNote,
     required this.imageUrl,
   });
 }
@@ -33,12 +32,10 @@ class MenuItemData {
 class OrderItem {
   final MenuItemData menuItem;
   int quantity;
-  String note;
 
   OrderItem({
     required this.menuItem,
     required this.quantity,
-    required this.note,
   });
 
   int get totalPrice => menuItem.price * quantity;
@@ -46,7 +43,11 @@ class OrderItem {
 
 class TransaksiPage extends StatefulWidget {
   final Map<String, int>? initialItemCounts;
-  const TransaksiPage({super.key, this.initialItemCounts});
+
+  const TransaksiPage({
+    super.key,
+    this.initialItemCounts,
+  });
 
   @override
   State<TransaksiPage> createState() => _TransaksiPageState();
@@ -55,6 +56,7 @@ class TransaksiPage extends StatefulWidget {
 class _TransaksiPageState extends State<TransaksiPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _paymentMethod = 'Tunai';
+  bool _isTransactionCompleted = false;
 
   @override
   void initState() {
@@ -69,7 +71,6 @@ class _TransaksiPageState extends State<TransaksiPage> {
               OrderItem(
                 menuItem: item,
                 quantity: count,
-                note: item.defaultNote,
               ),
             );
           }
@@ -84,18 +85,14 @@ class _TransaksiPageState extends State<TransaksiPage> {
       title: 'Ayam Geprek Bakar + Es Teh',
       category: 'Geprek Bakar',
       price: 18000,
-      defaultNote: '',
-      imageUrl:
-          'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=300&q=80',
+      imageUrl: 'assets/images/geprek_bakar.jpg',
     ),
     MenuItemData(
       id: '2',
       title: 'Ayam Geprek Biasa + Es Teh',
       category: 'Geprek Biasa',
       price: 17000,
-      defaultNote: '',
-      imageUrl:
-          'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&q=80',
+      imageUrl: 'assets/images/geprek_biasa.jpg',
     ),
   ];
 
@@ -126,57 +123,17 @@ class _TransaksiPageState extends State<TransaksiPage> {
     return total;
   }
 
-  int get _tax => (_subtotal * 0.1).round();
-  int get _grandTotal => _subtotal + _tax;
+  int get _grandTotal => _subtotal;
 
-  void _showNoteDialog(OrderItem orderItem) {
-    final controller = TextEditingController(text: orderItem.note);
+
+  void _showSuccessDialog({int? bayar, int? kembalian, String? catatan}) {
+    setState(() {
+      _isTransactionCompleted = true;
+    });
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Catatan ${orderItem.menuItem.title}',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: 'Contoh: Pedas Lv 3, Ekstra Sambal, Tanpa Es...',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            filled: true,
-            fillColor: const Color(0xFFF9FAFB),
-          ),
-          maxLines: 2,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal', style: TextStyle(color: subTextGrey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryGreen,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              setState(() {
-                orderItem.note = controller.text.trim();
-              });
-              Navigator.pop(ctx);
-            },
-            child: const Text('Simpan', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSuccessDialog() {
-    showDialog(
-      context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         content: Column(
@@ -190,16 +147,18 @@ class _TransaksiPageState extends State<TransaksiPage> {
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              'Metode Pembayaran: $_paymentMethod\nStruk dicetak ke Thermal ESC/POS Printer (${_formatCurrency(_grandTotal)})',
+              _paymentMethod == 'Tunai' && bayar != null
+                  ? 'Metode Pembayaran: Tunai\nTotal: ${_formatCurrency(_grandTotal)}\nBayar: ${_formatCurrency(bayar)}\nKembalian: ${_formatCurrency(kembalian ?? 0)}${catatan != null && catatan.isNotEmpty ? '\nCatatan: $catatan' : ''}\n\nStruk dicetak ke Thermal ESC/POS Printer'
+                  : 'Metode Pembayaran: $_paymentMethod\nStruk dicetak ke Thermal ESC/POS Printer (${_formatCurrency(_grandTotal)})',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: subTextGrey, height: 1.4),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
+                backgroundColor: primaryGreen,
                 minimumSize: const Size(double.infinity, 44),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
@@ -209,13 +168,268 @@ class _TransaksiPageState extends State<TransaksiPage> {
                 setState(() {
                   _orderedItems.clear();
                 });
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context, true);
+                } else {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const BerandaPage(),
+                    ),
+                  );
+                }
               },
               child:
-                  const Text('Tutup', style: TextStyle(color: Colors.white)),
+                  const Text('Selesai & Transaksi Baru', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showCashPaymentDialog() {
+    final bayarController = TextEditingController();
+    final kembalianController = TextEditingController();
+    final cttController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void updateKembalian(String value) {
+              final clean = value.replaceAll(RegExp(r'[^0-9]'), '');
+              if (clean.isEmpty) {
+                kembalianController.text = '';
+                return;
+              }
+              final nominal = int.tryParse(clean) ?? 0;
+              final diff = nominal - _grandTotal;
+              if (diff >= 0) {
+                kembalianController.text = _formatCurrency(diff);
+              } else {
+                kembalianController.text = 'Kurang ${_formatCurrency(diff.abs())}';
+              }
+            }
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+                side: const BorderSide(color: primaryGreen, width: 3.5),
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 28, 22, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Judul Dialog
+                    const Text(
+                      'Silahkan Masukan Nominal',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Total Tagihan: ${_formatCurrency(_grandTotal)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: primaryGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Input 1: bayar
+                    TextField(
+                      controller: bayarController,
+                      keyboardType: TextInputType.number,
+                      autofocus: true,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: textDark,
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          updateKembalian(val);
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'bayar',
+                        hintStyle: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 16,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: primaryGreen,
+                            width: 2.2,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: primaryGreen,
+                            width: 2.8,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Input 2: kembalian
+                    TextField(
+                      controller: kembalianController,
+                      readOnly: true,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: primaryGreen,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'kembalian',
+                        hintStyle: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 16,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: primaryGreen,
+                            width: 2.2,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: primaryGreen,
+                            width: 2.2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF9FAFB),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Input 3: ctt
+                    TextField(
+                      controller: cttController,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: textDark,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'ctt',
+                        hintStyle: const TextStyle(
+                          color: Color(0xFF9CA3AF),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 16,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: primaryGreen,
+                            width: 2.2,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: primaryGreen,
+                            width: 2.8,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Tombol DONE
+                    SizedBox(
+                      width: 150,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryGreen,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () {
+                          final clean = bayarController.text.replaceAll(RegExp(r'[^0-9]'), '');
+                          final bayarVal = int.tryParse(clean) ?? 0;
+
+                          if (bayarVal < _grandTotal) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  bayarVal == 0
+                                      ? 'Silakan masukkan uang bayar pembeli!'
+                                      : 'Uang bayar kurang dari total ${_formatCurrency(_grandTotal)}',
+                                ),
+                                duration: const Duration(seconds: 2),
+                                backgroundColor: const Color(0xFFDC2626),
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            );
+                            return;
+                          }
+
+                          Navigator.pop(ctx);
+                          _showSuccessDialog(
+                            bayar: bayarVal,
+                            kembalian: bayarVal - _grandTotal,
+                            catatan: cttController.text.trim(),
+                          );
+                        },
+                        child: const Text(
+                          'DONE',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -432,13 +646,19 @@ class _TransaksiPageState extends State<TransaksiPage> {
     if (_paymentMethod == 'QRIS') {
       _showQRISDialog();
     } else {
-      _showSuccessDialog();
+      _showCashPaymentDialog();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope<bool>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _isTransactionCompleted);
+      },
+      child: Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgYellow,
       endDrawer: const AppDrawer(currentPage: 'transaksi'),
@@ -500,6 +720,7 @@ class _TransaksiPageState extends State<TransaksiPage> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -532,20 +753,76 @@ class _TransaksiPageState extends State<TransaksiPage> {
     );
   }
 
-  // --- Sub Header: Pesanan Baru ---
+  // --- Sub Header: Pesanan Baru & Tombol Kembali ---
   Widget _buildSubHeaderRow() {
-    return const Row(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Icon(Icons.circle, color: textDark, size: 9),
-        SizedBox(width: 6),
-        Text(
-          'PESANAN BARU',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w900,
-            color: textDark,
-            letterSpacing: 0.8,
+        // Tombol Kembali ke Beranda (Atas Kiri)
+        InkWell(
+          onTap: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context, _isTransactionCompleted);
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const BerandaPage(),
+                ),
+              );
+            }
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.arrow_back_rounded,
+                  size: 15,
+                  color: textDark,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Kembali ke Beranda',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: textDark,
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+
+        // PESANAN BARU Badge
+        const Row(
+          children: [
+            Icon(Icons.circle, color: textDark, size: 8),
+            SizedBox(width: 5),
+            Text(
+              'PESANAN BARU',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: textDark,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -745,33 +1022,28 @@ class _TransaksiPageState extends State<TransaksiPage> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Title & Price note
+                    // Title & Price
                     Expanded(
-                      child: InkWell(
-                        onTap: () => _showNoteDialog(order),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              order.menuItem.title,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: textDark,
-                              ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            order.menuItem.title,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: textDark,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '@ ${_formatCurrency(order.menuItem.price)}${order.note.isNotEmpty ? ' · ${order.note}' : ' · Lv 3'}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: subTextGrey,
-                              ),
+                          ),
+                          Text(
+                            '@ ${_formatCurrency(order.menuItem.price)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: subTextGrey,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
 
@@ -832,97 +1104,27 @@ class _TransaksiPageState extends State<TransaksiPage> {
         ],
       ),
       padding: const EdgeInsets.all(16),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Subtotal
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Subtotal',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF4B5563),
-                ),
-              ),
-              Text(
-                _formatCurrency(_subtotal),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: textDark,
-                ),
-              ),
-            ],
+          const Text(
+            'TOTAL PEMBAYARAN',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: textDark,
+              letterSpacing: 0.3,
+            ),
           ),
-          const SizedBox(height: 6),
-
-          // Pajak Resto (10%)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Pajak Resto (10%)',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF4B5563),
-                ),
-              ),
-              Text(
-                _formatCurrency(_tax),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: textDark,
-                ),
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: Divider(color: Color(0xFFF3F4F6), thickness: 1),
-          ),
-
-          // TOTAL AKHIR
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'TOTAL AKHIR',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: textDark,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Termasuk PPN',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: subTextGrey,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                _formatCurrency(_grandTotal),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: textDark,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
+          Text(
+            _formatCurrency(_grandTotal),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: textDark,
+              letterSpacing: -0.5,
+            ),
           ),
         ],
       ),
@@ -936,7 +1138,7 @@ class _TransaksiPageState extends State<TransaksiPage> {
       height: 52,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
+          backgroundColor: primaryGreen,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
