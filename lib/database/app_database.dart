@@ -19,6 +19,9 @@ class Products extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
+  static AppDatabase? _instance;
+  static AppDatabase get instance => _instance ??= AppDatabase();
+
   @override
   int get schemaVersion => 1;
 
@@ -28,12 +31,34 @@ class AppDatabase extends _$AppDatabase {
 
   // Query Ambil Semua Produk
   Future<List<Product>> getAllProducts() => select(products).get();
+
+  // Inisialisasi awal produk jika belum ada data (seeding offline)
+  Future<void> seedInitialData() async {
+    final existing = await getAllProducts();
+    if (existing.isEmpty) {
+      await addProduct(
+        const ProductsCompanion(
+          name: Value('Ayam Geprek Bakar + Es Teh'),
+          price: Value(18000),
+          category: Value('Geprek Bakar'),
+        ),
+      );
+      await addProduct(
+        const ProductsCompanion(
+          name: Value('Ayam Geprek Biasa + Es Teh'),
+          price: Value(17000),
+          category: Value('Geprek Biasa'),
+        ),
+      );
+    }
+  }
 }
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'db.sqlite'));
-    return NativeDatabase.factory(file);
+    return NativeDatabase.createInBackground(file);
   });
 }
+

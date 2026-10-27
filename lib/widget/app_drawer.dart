@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/secure_storage_service.dart';
 import '../pages/Beranda.dart';
-import '../pages/Transaksi.dart';
 import '../pages/LogTransaksi.dart';
 import '../pages/Login.dart';
 
@@ -12,10 +12,14 @@ const Color drawerLogoutRed = Color(0xFFDC2626);
 
 class AppDrawer extends StatelessWidget {
   final String currentPage;
+  final String? currentKasir;
+  final String? currentShift;
 
   const AppDrawer({
     super.key,
     required this.currentPage,
+    this.currentKasir,
+    this.currentShift,
   });
 
   @override
@@ -68,27 +72,10 @@ class AppDrawer extends StatelessWidget {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const BerandaPage(),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Tombol TRANSAKSI
-                  _buildDrawerButton(
-                    context: context,
-                    text: 'TRANSAKSI',
-                    bgColor: drawerYellow,
-                    textColor: drawerBgDarkGreen,
-                    onTap: () {
-                      Navigator.pop(context);
-                      if (currentPage != 'transaksi') {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const TransaksiPage(),
+                            builder: (context) => BerandaPage(
+                              currentKasir: currentKasir,
+                              currentShift: currentShift,
+                            ),
                           ),
                         );
                       }
@@ -108,7 +95,10 @@ class AppDrawer extends StatelessWidget {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const LogTransaksiPage(),
+                            builder: (context) => LogTransaksiPage(
+                              currentKasir: currentKasir,
+                              currentShift: currentShift,
+                            ),
                           ),
                         );
                       }
@@ -161,7 +151,11 @@ class AppDrawer extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
+              // Hapus sesi kasir aktif secara aman
+              await SecureStorageService().deleteAuthToken();
+
+              if (!context.mounted) return;
               Navigator.pop(ctx);
               Navigator.pop(context); // Close Drawer
               Navigator.pushAndRemoveUntil(

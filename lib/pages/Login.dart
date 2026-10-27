@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/secure_storage_service.dart';
+import '../services/settings_service.dart';
 import 'Beranda.dart';
 
 class LoginPage extends StatefulWidget {
@@ -15,15 +17,90 @@ class _LoginPageState extends State<LoginPage> {
   static const Color textDark = Color(0xFF111111);
   static const Color subTextGrey = Color(0xFF6B7280);
 
-  String _currentKasir = 'Nama Kasir';
-  String _currentShift = 'Shift Pagi';
-  String _currentShiftTime = '08:00 – 12:00 WIB';
+  late String _currentKasir;
+  late String _currentShift;
+  late String _currentShiftTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _initShiftByCurrentTime();
+  }
+
+  void _initShiftByCurrentTime() {
+    final now = DateTime.now();
+    final hour = now.hour;
+
+    // Shift Pagi: 08:00 – 12:00 WIB (Rian)
+    // Shift Siang: 12:00 – 17:00 WIB (Siti)
+    // Shift Malam: 17:00 – 22:00 WIB (Budi)
+    if (hour >= 8 && hour < 12) {
+      _currentKasir = 'Rian';
+      _currentShift = 'Shift Pagi';
+      _currentShiftTime = '08:00 – 12:00 WIB';
+    } else if (hour >= 12 && hour < 17) {
+      _currentKasir = 'Siti';
+      _currentShift = 'Shift Siang';
+      _currentShiftTime = '12:00 – 17:00 WIB';
+    } else if (hour >= 17 && hour < 22) {
+      _currentKasir = 'Budi';
+      _currentShift = 'Shift Malam';
+      _currentShiftTime = '17:00 – 22:00 WIB';
+    } else if (hour < 8) {
+      // Sebelum jam 08:00 dialokasikan ke shift pagi terdekat
+      _currentKasir = 'Rian';
+      _currentShift = 'Shift Pagi';
+      _currentShiftTime = '08:00 – 12:00 WIB';
+    } else {
+      // Lewat jam 22:00 dialokasikan ke shift malam
+      _currentKasir = 'Budi';
+      _currentShift = 'Shift Malam';
+      _currentShiftTime = '17:00 – 22:00 WIB';
+    }
+  }
+
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu'
+    ];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    final dayName = days[now.weekday - 1];
+    final monthName = months[now.month - 1];
+    return '$dayName, ${now.day} $monthName ${now.year}';
+  }
+
+  String _getFormattedTime() {
+    final now = DateTime.now();
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
+    return '$hour:$minute WIB';
+  }
 
   void _showGantiKasirDialog() {
     final kasirList = [
-      {'nama': 'Rian (Kasir 01)', 'shift': 'Shift Pagi', 'waktu': '08:00 – 12:00 WIB'},
-      {'nama': 'Siti (Kasir 02)', 'shift': 'Shift Siang', 'waktu': '12:00 – 17:00 WIB'},
-      {'nama': 'Budi (Kasir 03)', 'shift': 'Shift Malam', 'waktu': '17:00 – 22:00 WIB'},
+      {'nama': 'Rian', 'shift': 'Shift Pagi', 'waktu': '08:00 – 12:00 WIB'},
+      {'nama': 'Siti', 'shift': 'Shift Siang', 'waktu': '12:00 – 17:00 WIB'},
+      {'nama': 'Budi', 'shift': 'Shift Malam', 'waktu': '17:00 – 22:00 WIB'},
     ];
 
     showModalBottomSheet(
@@ -143,18 +220,18 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ],
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Senin, 14 Okt 2026',
-                            style: TextStyle(
+                            _getFormattedDate(),
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: textDark,
                             ),
                           ),
-                          Padding(
+                          const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 6.0),
                             child: Text(
                               '•',
@@ -166,8 +243,8 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           Text(
-                            '15:30 WIB',
-                            style: TextStyle(
+                            _getFormattedTime(),
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               color: textDark,
@@ -240,79 +317,109 @@ class _LoginPageState extends State<LoginPage> {
                   const Spacer(flex: 2),
 
                   // 4. White Card: KASIR BERTUGAS
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _showGantiKasirDialog,
                       borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 14,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'KASIR BERTUGAS',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
-                            color: textDark,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _currentKasir,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            color: textDark,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.access_time_rounded,
-                              size: 16,
-                              color: textDark,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _currentShift,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: textDark,
-                              ),
-                            ),
-                            Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 7),
-                              width: 4,
-                              height: 4,
-                              decoration: const BoxDecoration(
-                                color: textDark,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            Text(
-                              _currentShiftTime,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: textDark,
-                              ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 14,
+                              offset: const Offset(0, 4),
                             ),
                           ],
                         ),
-                      ],
+                        child: Column(
+                          children: [
+                            const Text(
+                              'KASIR BERTUGAS',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: textDark,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _currentKasir,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: _currentKasir == 'Pilih Kasir'
+                                    ? const Color(0xFF6B7280)
+                                    : textDark,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if (_currentKasir != 'Pilih Kasir')
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.access_time_rounded,
+                                    size: 16,
+                                    color: textDark,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    _currentShift,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: textDark,
+                                    ),
+                                  ),
+                                  Container(
+                                    margin: const EdgeInsets.symmetric(horizontal: 7),
+                                    width: 4,
+                                    height: 4,
+                                    decoration: const BoxDecoration(
+                                      color: textDark,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  Text(
+                                    _currentShiftTime,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: textDark,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.touch_app_outlined,
+                                    size: 16,
+                                    color: subTextGrey,
+                                  ),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    'Ketuk untuk memilih kasir bertugas',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: subTextGrey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
 
@@ -320,11 +427,57 @@ class _LoginPageState extends State<LoginPage> {
 
                   // 5. Button "MULAI SHIFT"
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
+                    onPressed: () async {
+                      if (_currentKasir == 'Pilih Kasir') {
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Pilih kasir terlebih dahulu!',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: const Color(0xFFDC2626),
+                            behavior: SnackBarBehavior.floating,
+                            duration: const Duration(seconds: 2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      final navigator = Navigator.of(context);
+
+                      // Simpan sesi kasir aktif ke SecureStorage & SharedPreferences
+                      await SecureStorageService().saveSession(
+                        kasir: _currentKasir,
+                        shift: _currentShift,
+                      );
+                      await SettingsService.setLastKasir(_currentKasir);
+
+                      navigator.pushReplacement(
                         MaterialPageRoute(
-                          builder: (context) => const BerandaPage(),
+                          builder: (context) => BerandaPage(
+                            currentKasir: _currentKasir,
+                            currentShift: _currentShift,
+                          ),
                         ),
                       );
                     },
@@ -361,7 +514,7 @@ class _LoginPageState extends State<LoginPage> {
 
                   const SizedBox(height: 12),
 
-                  // 6. Button "Ganti Kasir"
+                  // 6. Button "Ganti Kasir" / "Pilih Kasir"
                   ElevatedButton(
                     onPressed: _showGantiKasirDialog,
                     style: ElevatedButton.styleFrom(
@@ -374,18 +527,20 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.badge_outlined,
                           size: 20,
                           color: textDark,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
-                          'Ganti Kasir',
-                          style: TextStyle(
+                          _currentKasir == 'Pilih Kasir'
+                              ? 'Pilih Kasir'
+                              : 'Ganti Kasir',
+                          style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             color: textDark,

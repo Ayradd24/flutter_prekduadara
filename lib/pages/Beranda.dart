@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../database/app_database.dart';
 import '../widget/app_drawer.dart';
 import 'Transaksi.dart';
+import 'LogTransaksi.dart';
 
 // Palette warna konsisten tema PrekDuaDara
 const Color bgYellow = Color(0xFFFBBF24);
@@ -8,9 +10,17 @@ const Color primaryGreen = Color(0xFF1E6F38);
 const Color ribbonOrange = Color(0xFFE57E25);
 const Color textDark = Color(0xFF111111);
 const Color subTextGrey = Color(0xFF6B7280);
+const Color qrisBlue = Color(0xFF2563EB);
 
 class BerandaPage extends StatefulWidget {
-  const BerandaPage({super.key});
+  final String? currentKasir;
+  final String? currentShift;
+
+  const BerandaPage({
+    super.key,
+    this.currentKasir,
+    this.currentShift,
+  });
 
   @override
   State<BerandaPage> createState() => _BerandaPageState();
@@ -19,11 +29,52 @@ class BerandaPage extends StatefulWidget {
 class _BerandaPageState extends State<BerandaPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  String get _effectiveKasir {
+    if (widget.currentKasir != null && widget.currentKasir!.isNotEmpty && widget.currentKasir != 'Pilih Kasir') {
+      return widget.currentKasir!;
+    }
+    final hour = DateTime.now().hour;
+    if (hour >= 8 && hour < 12) return 'Rian';
+    if (hour >= 12 && hour < 17) return 'Siti';
+    return 'Budi';
+  }
+
+  String get _effectiveShift {
+    if (widget.currentShift != null && widget.currentShift!.isNotEmpty && widget.currentShift != '-') {
+      return widget.currentShift!;
+    }
+    final hour = DateTime.now().hour;
+    if (hour >= 8 && hour < 12) return 'Shift Pagi';
+    if (hour >= 12 && hour < 17) return 'Shift Siang';
+    return 'Shift Malam';
+  }
+
   // Map of item quantities added
   final Map<String, int> _itemCounts = {
     'Ayam Geprek Bakar + Es Teh': 0,
     'Ayam Geprek Biasa + Es Teh': 0,
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProductsFromDatabase();
+  }
+
+  Future<void> _loadProductsFromDatabase() async {
+    try {
+      final dbProducts = await AppDatabase.instance.getAllProducts();
+      if (mounted && dbProducts.isNotEmpty) {
+        setState(() {
+          for (var p in dbProducts) {
+            _itemCounts.putIfAbsent(p.name, () => 0);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading products from local db: $e');
+    }
+  }
 
   void _addItem(String name, int price) {
     setState(() {
@@ -62,7 +113,11 @@ class _BerandaPageState extends State<BerandaPage> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgYellow,
-      endDrawer: const AppDrawer(currentPage: 'beranda'),
+      endDrawer: AppDrawer(
+        currentPage: 'beranda',
+        currentKasir: _effectiveKasir,
+        currentShift: _effectiveShift,
+      ),
       body: Stack(
         children: [
           // Background Decorative Graphics (Diagonal Orange Ribbons)
@@ -105,8 +160,7 @@ class _BerandaPageState extends State<BerandaPage> {
                           description:
                               'Nasi + Ayam Geprek Bakar + Es Teh',
                           price: 18000,
-                          imageUrl:
-                              'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=300&q=80',
+                          imageUrl: 'assets/images/geprek_bakar.jpg',
                         ),
                         const SizedBox(height: 12),
 
@@ -116,8 +170,7 @@ class _BerandaPageState extends State<BerandaPage> {
                           description:
                               'Nasi + Ayam Geprek Biasa + Es Teh',
                           price: 17000,
-                          imageUrl:
-                              'https://images.unsplash.com/photo-1562967914-608f82629710?w=300&q=80',
+                          imageUrl: 'assets/images/geprek_biasa.jpg',
                         ),
                         const SizedBox(height: 16),
 
@@ -165,6 +218,8 @@ class _BerandaPageState extends State<BerandaPage> {
 
   // --- Cashier Status Card ---
   Widget _buildCashierStatusCard() {
+    final namaKasir = _effectiveKasir.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -187,13 +242,13 @@ class _BerandaPageState extends State<BerandaPage> {
                 width: 8,
                 height: 8,
                 decoration: const BoxDecoration(
-                  color: textDark,
+                  color: primaryGreen,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 8),
               const Text(
-                'Kasir 01 · Online',
+                'Online',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -209,18 +264,18 @@ class _BerandaPageState extends State<BerandaPage> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   Icons.badge_outlined,
                   size: 15,
                   color: textDark,
                 ),
-                SizedBox(width: 5),
+                const SizedBox(width: 5),
                 Text(
-                  'Kasir: NamaKasir',
-                  style: TextStyle(
+                  'Kasir: $namaKasir',
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: textDark,
@@ -281,9 +336,9 @@ class _BerandaPageState extends State<BerandaPage> {
                   color: const Color(0xFFE5E7EB),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text(
-                  'Shift Siang',
-                  style: TextStyle(
+                child: Text(
+                  _effectiveShift,
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF374151),
@@ -327,7 +382,7 @@ class _BerandaPageState extends State<BerandaPage> {
           ),
           const SizedBox(height: 14),
 
-          // Dual-segment Progress Bar (Green + Red)
+          // Dual-segment Progress Bar (Green + Blue)
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
@@ -340,10 +395,10 @@ class _BerandaPageState extends State<BerandaPage> {
                     child: Container(color: primaryGreen),
                   ),
                   const SizedBox(width: 2),
-                  // QRIS Segment (Red/Crimson)
+                  // QRIS Segment (Blue)
                   Expanded(
                     flex: 50,
-                    child: Container(color: const Color(0xFFDC2626)),
+                    child: Container(color: qrisBlue),
                   ),
                 ],
               ),
@@ -352,48 +407,70 @@ class _BerandaPageState extends State<BerandaPage> {
           const SizedBox(height: 10),
 
           // Legend
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: primaryGreen,
-                      shape: BoxShape.circle,
-                    ),
+                  Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Icon(Icons.circle, size: 7, color: primaryGreen),
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Tunai: Rp 950.000',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: primaryGreen,
-                    ),
+                  SizedBox(width: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tunai: Rp 950.000',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: primaryGreen,
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        '21 Transaksi',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: subTextGrey,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFDC2626),
-                      shape: BoxShape.circle,
-                    ),
+                  Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Icon(Icons.circle, size: 7, color: qrisBlue),
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'QRIS: Rp 500.000',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFDC2626),
-                    ),
+                  SizedBox(width: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'QRIS: Rp 500.000',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: qrisBlue,
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        '11 Transaksi',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: subTextGrey,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -406,14 +483,13 @@ class _BerandaPageState extends State<BerandaPage> {
 
   // --- Menu Section Header ---
   Widget _buildMenuHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(
                   Icons.bolt_rounded,
@@ -431,59 +507,62 @@ class _BerandaPageState extends State<BerandaPage> {
                 ),
               ],
             ),
-            SizedBox(height: 2),
-            Text(
-              'Tap (+) untuk menambahkan cepat ke pesanan',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: textDark,
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LogTransaksiPage(
+                      currentKasir: _effectiveKasir,
+                      currentShift: _effectiveShift,
+                    ),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Log Transaksi',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: textDark,
+                      ),
+                    ),
+                    SizedBox(width: 3),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 13,
+                      color: textDark,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-        InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TransaksiPage(),
-              ),
-            );
-          },
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Transaksi',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: textDark,
-                  ),
-                ),
-                SizedBox(width: 3),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 13,
-                  color: textDark,
-                ),
-              ],
-            ),
+        const SizedBox(height: 3),
+        const Text(
+          'Tap (+) untuk menambahkan cepat ke pesanan',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: textDark,
           ),
         ),
       ],
@@ -521,20 +600,35 @@ class _BerandaPageState extends State<BerandaPage> {
             child: SizedBox(
               width: 76,
               height: 76,
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: const Color(0xFFE5E7EB),
-                    child: const Icon(
-                      Icons.fastfood_rounded,
-                      color: Color(0xFF9CA3AF),
-                      size: 32,
+              child: imageUrl.startsWith('http')
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: const Color(0xFFE5E7EB),
+                          child: const Icon(
+                            Icons.fastfood_rounded,
+                            color: Color(0xFF9CA3AF),
+                            size: 32,
+                          ),
+                        );
+                      },
+                    )
+                  : Image.asset(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: const Color(0xFFE5E7EB),
+                          child: const Icon(
+                            Icons.fastfood_rounded,
+                            color: Color(0xFF9CA3AF),
+                            size: 32,
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -643,6 +737,7 @@ class _BerandaPageState extends State<BerandaPage> {
   // --- Confirm & Pay Button ---
   Widget _buildConfirmPayButton() {
     final totalCount = _itemCounts.values.fold(0, (sum, count) => sum + count);
+    final bool hasOrder = totalCount > 0;
     int totalPrice = 0;
     totalPrice += (_itemCounts['Ayam Geprek Bakar + Es Teh'] ?? 0) * 18000;
     totalPrice += (_itemCounts['Ayam Geprek Biasa + Es Teh'] ?? 0) * 17000;
@@ -660,8 +755,43 @@ class _BerandaPageState extends State<BerandaPage> {
         ],
       ),
       child: ElevatedButton(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          if (!hasOrder) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Harus ada pesanan terpilih sebelum konfirmasi!',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFFDC2626),
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            );
+            return;
+          }
+
+          final result = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
               builder: (context) => TransaksiPage(
@@ -669,6 +799,12 @@ class _BerandaPageState extends State<BerandaPage> {
               ),
             ),
           );
+
+          if (result == true && mounted) {
+            setState(() {
+              _itemCounts.updateAll((key, value) => 0);
+            });
+          }
         },
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryGreen,
@@ -702,7 +838,7 @@ class _BerandaPageState extends State<BerandaPage> {
                         letterSpacing: 0.5,
                       ),
                     ),
-                    if (totalCount > 0)
+                    if (hasOrder)
                       Text(
                         '$totalCount Item · ${_formatRupiah(totalPrice)}',
                         style: const TextStyle(
