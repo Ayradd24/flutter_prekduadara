@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../widget/app_drawer.dart';
 import 'Transaksi.dart';
@@ -110,90 +111,103 @@ class _BerandaPageState extends State<BerandaPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: bgYellow,
-      endDrawer: AppDrawer(
-        currentPage: 'beranda',
-        currentKasir: _effectiveKasir,
-        currentShift: _effectiveShift,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      body: Stack(
-        children: [
-          // Background Decorative Graphics (Diagonal Orange Ribbons)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _BerandaBackgroundPainter(),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: bgYellow,
+        endDrawer: AppDrawer(
+          currentPage: 'beranda',
+          currentKasir: _effectiveKasir,
+          currentShift: _effectiveShift,
+        ),
+        body: Stack(
+          children: [
+            // Background Decorative Graphics (Diagonal Orange Ribbons)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _BerandaBackgroundPainter(),
+              ),
             ),
-          ),
 
-          SafeArea(
-            bottom: false,
-            child: Column(
+            Column(
               children: [
-                // 1. Top Bar / Header
+                // 1. Top Bar / Header (Putih memanjang sampai menutupi status bar)
                 _buildHeader(),
 
                 // 2. Main Scrollable Content
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Cashier Status Card
-                        _buildCashierStatusCard(),
-                        const SizedBox(height: 12),
+                  child: SafeArea(
+                    top: false,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Cashier Status Card
+                          _buildCashierStatusCard(),
+                          const SizedBox(height: 12),
 
-                        // Omset Shift Card
-                        _buildOmsetCard(),
-                        const SizedBox(height: 16),
+                          // Omset Shift Card
+                          _buildOmsetCard(),
+                          const SizedBox(height: 16),
 
-                        // Menu Section Header
-                        _buildMenuHeader(),
-                        const SizedBox(height: 10),
+                          // Menu Section Header
+                          _buildMenuHeader(),
+                          const SizedBox(height: 10),
 
-                        // Menu Item 1: Geprek Bakar + Es Teh
-                        _buildMenuItemCard(
-                          title: 'Ayam Geprek Bakar + Es Teh',
-                          description:
-                              'Nasi + Ayam Geprek Bakar + Es Teh',
-                          price: 18000,
-                          imageUrl: 'assets/images/geprek_bakar.jpg',
-                        ),
-                        const SizedBox(height: 12),
+                          // Menu Item 1: Geprek Bakar + Es Teh
+                          _buildMenuItemCard(
+                            title: 'Ayam Geprek Bakar + Es Teh',
+                            description:
+                                'Nasi + Ayam Geprek Bakar + Es Teh',
+                            price: 18000,
+                            imageUrl: 'assets/images/geprek_bakar.jpg',
+                          ),
+                          const SizedBox(height: 12),
 
-                        // Menu Item 2: Geprek Biasa + Es Teh
-                        _buildMenuItemCard(
-                          title: 'Ayam Geprek Biasa + Es Teh',
-                          description:
-                              'Nasi + Ayam Geprek Biasa + Es Teh',
-                          price: 17000,
-                          imageUrl: 'assets/images/geprek_biasa.jpg',
-                        ),
-                        const SizedBox(height: 16),
+                          // Menu Item 2: Geprek Biasa + Es Teh
+                          _buildMenuItemCard(
+                            title: 'Ayam Geprek Biasa + Es Teh',
+                            description:
+                                'Nasi + Ayam Geprek Biasa + Es Teh',
+                            price: 17000,
+                            imageUrl: 'assets/images/geprek_biasa.jpg',
+                          ),
+                          const SizedBox(height: 16),
 
-                        // Tombol Konfirmasi dan Bayar
-                        _buildConfirmPayButton(),
-                        const SizedBox(height: 12),
-                      ],
+                          // Tombol Konfirmasi dan Bayar
+                          _buildConfirmPayButton(),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   // --- Header ---
   Widget _buildHeader() {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: EdgeInsets.only(
+        top: topPadding > 0 ? topPadding + 8 : 12,
+        bottom: 12,
+        left: 18,
+        right: 18,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

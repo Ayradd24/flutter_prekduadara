@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'database/app_database.dart';
-import 'pages/Login.dart';
+import 'pages/SplashScreen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF206C36)),
         useMaterial3: true,
       ),
-      home: const LoginPage(),
+      home: const SplashScreen(),
     );
   }
 }

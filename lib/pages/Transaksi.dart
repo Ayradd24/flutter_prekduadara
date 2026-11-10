@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../widget/app_drawer.dart';
 import 'Beranda.dart';
 
@@ -652,83 +653,96 @@ class _TransaksiPageState extends State<TransaksiPage> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope<bool>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        Navigator.pop(context, _isTransactionCompleted);
-      },
-      child: Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: bgYellow,
-      endDrawer: const AppDrawer(currentPage: 'transaksi'),
-      body: Stack(
-        children: [
-          // Background Decorative Graphics (Diagonal Orange Ribbons)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _TransaksiBackgroundPainter(),
-            ),
-          ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: PopScope<bool>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          Navigator.pop(context, _isTransactionCompleted);
+        },
+        child: Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: bgYellow,
+          endDrawer: const AppDrawer(currentPage: 'transaksi'),
+          body: Stack(
+            children: [
+              // Background Decorative Graphics (Diagonal Orange Ribbons)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _TransaksiBackgroundPainter(),
+                ),
+              ),
 
-          SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                // 1. Header Bar
-                _buildHeader(),
+              Column(
+                children: [
+                  // 1. Header Bar (Putih memanjang sampai status bar)
+                  _buildHeader(),
 
-                // 2. Scrollable Content
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Pesanan Baru Title
-                        _buildSubHeaderRow(),
-                        const SizedBox(height: 14),
+                  // 2. Scrollable Content
+                  Expanded(
+                    child: SafeArea(
+                      top: false,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Pesanan Baru Title
+                            _buildSubHeaderRow(),
+                            const SizedBox(height: 14),
 
-                        // Pesanan Card
-                        _buildPesananCard(),
-                        const SizedBox(height: 14),
+                            // Pesanan Card
+                            _buildPesananCard(),
+                            const SizedBox(height: 14),
 
-                        // Payment Method Selector
-                        _buildPaymentMethodSelector(),
-                        const SizedBox(height: 14),
+                            // Payment Method Selector
+                            _buildPaymentMethodSelector(),
+                            const SizedBox(height: 14),
 
-                        // Subtotal & Summary Card
-                        _buildSummaryCard(),
-                        const SizedBox(height: 14),
+                            // Subtotal & Summary Card
+                            _buildSummaryCard(),
+                            const SizedBox(height: 14),
 
-                        // Print and Save Button
-                        _buildPrintButton(),
-                        const SizedBox(height: 10),
+                            // Print and Save Button
+                            _buildPrintButton(),
+                            const SizedBox(height: 10),
 
-                        // Printer Ready Status
-                        _buildPrinterStatus(),
-                        const SizedBox(height: 20),
+                            // Printer Ready Status
+                            _buildPrinterStatus(),
+                            const SizedBox(height: 20),
 
-                        const SizedBox(height: 12),
-                      ],
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-    ),
     );
   }
 
   // --- Header ---
   Widget _buildHeader() {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: EdgeInsets.only(
+        top: topPadding > 0 ? topPadding + 8 : 12,
+        bottom: 12,
+        left: 18,
+        right: 18,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

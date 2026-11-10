@@ -31,9 +31,6 @@ class _LoginPageState extends State<LoginPage> {
     final now = DateTime.now();
     final hour = now.hour;
 
-    // Shift Pagi: 08:00 – 12:00 WIB (Rian)
-    // Shift Siang: 12:00 – 17:00 WIB (Siti)
-    // Shift Malam: 17:00 – 22:00 WIB (Budi)
     if (hour >= 8 && hour < 12) {
       _currentKasir = 'Rian';
       _currentShift = 'Shift Pagi';
@@ -47,12 +44,10 @@ class _LoginPageState extends State<LoginPage> {
       _currentShift = 'Shift Malam';
       _currentShiftTime = '17:00 – 22:00 WIB';
     } else if (hour < 8) {
-      // Sebelum jam 08:00 dialokasikan ke shift pagi terdekat
       _currentKasir = 'Rian';
       _currentShift = 'Shift Pagi';
       _currentShiftTime = '08:00 – 12:00 WIB';
     } else {
-      // Lewat jam 22:00 dialokasikan ke shift malam
       _currentKasir = 'Budi';
       _currentShift = 'Shift Malam';
       _currentShiftTime = '17:00 – 22:00 WIB';

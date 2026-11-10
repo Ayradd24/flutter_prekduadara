@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../widget/app_drawer.dart';
 import 'Login.dart';
 import 'Beranda.dart';
@@ -296,80 +297,93 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             .where((t) => t.paymentMethod.toUpperCase() == _selectedFilter.toUpperCase())
             .toList();
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: bgYellow,
-      endDrawer: AppDrawer(
-        currentPage: 'log_transaksi',
-        currentKasir: _effectiveKasir,
-        currentShift: _effectiveShift,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      body: Stack(
-        children: [
-          // Background Decorative Graphics (Diagonal Orange Ribbons)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _LogTransaksiBackgroundPainter(),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: bgYellow,
+        endDrawer: AppDrawer(
+          currentPage: 'log_transaksi',
+          currentKasir: _effectiveKasir,
+          currentShift: _effectiveShift,
+        ),
+        body: Stack(
+          children: [
+            // Background Decorative Graphics (Diagonal Orange Ribbons)
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _LogTransaksiBackgroundPainter(),
+              ),
             ),
-          ),
 
-          SafeArea(
-            bottom: false,
-            child: Column(
+            Column(
               children: [
-                // 1. Header Bar
+                // 1. Header Bar (Putih memanjang sampai status bar)
                 _buildHeader(),
 
                 // 2. Scrollable Content
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Tombol Kembali ke Beranda
-                        _buildSubHeaderRow(),
-                        const SizedBox(height: 12),
+                  child: SafeArea(
+                    top: false,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Tombol Kembali ke Beranda
+                          _buildSubHeaderRow(),
+                          const SizedBox(height: 12),
 
-                        // Pesanan Harian Title & Date
-                        _buildPesananHarianRow(),
-                        const SizedBox(height: 12),
+                          // Pesanan Harian Title & Date
+                          _buildPesananHarianRow(),
+                          const SizedBox(height: 12),
 
-                        // Total Omset Hari Ini Card
-                        _buildOmsetCard(),
-                        const SizedBox(height: 16),
+                          // Total Omset Hari Ini Card
+                          _buildOmsetCard(),
+                          const SizedBox(height: 16),
 
-                        // Filter Chips (Semua, Tunai, QRIS)
-                        _buildFilterChips(),
-                        const SizedBox(height: 14),
+                          // Filter Chips (Semua, Tunai, QRIS)
+                          _buildFilterChips(),
+                          const SizedBox(height: 14),
 
-                        // Transactions List
-                        ...filteredList.map((trx) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _buildTransactionCard(trx),
-                            )),
+                          // Transactions List
+                          ...filteredList.map((trx) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: _buildTransactionCard(trx),
+                              )),
 
-                        // Validasi Akhir Shift Section
-                        _buildValidasiShiftSection(),
-                        const SizedBox(height: 12),
-                      ],
+                          // Validasi Akhir Shift Section
+                          _buildValidasiShiftSection(),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   // --- Header ---
   Widget _buildHeader() {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: EdgeInsets.only(
+        top: topPadding > 0 ? topPadding + 8 : 12,
+        bottom: 12,
+        left: 18,
+        right: 18,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
