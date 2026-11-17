@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../services/api_service.dart';
-import '../services/secure_storage_service.dart';
 import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
 import 'Transaksi.dart';
@@ -36,7 +35,6 @@ class _BerandaPageState extends State<BerandaPage> {
 
   String? _currentKasir;
   String? _currentShift;
-  List<KasirModel> _cashiers = [];
 
   int _totalOmset = 0;
   int _totalCount = 0;
@@ -97,10 +95,6 @@ class _BerandaPageState extends State<BerandaPage> {
     try {
       final list = await ApiService.ambilDaftarKasir();
       if (list.isNotEmpty && mounted) {
-        setState(() {
-          _cashiers = list;
-        });
-
         // Sinkronkan nama kasir aktif jika ada perubahan dari web/database
         final current = _effectiveKasir.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
         final matched = list.firstWhere(
@@ -120,154 +114,6 @@ class _BerandaPageState extends State<BerandaPage> {
     } catch (e) {
       debugPrint('Error loading cashiers in Beranda: $e');
     }
-  }
-
-  /// BottomSheet Pilih Kasir yang Bertugas (sinkron dari Web MariaDB)
-  void _showGantiAtauUbahKasirModal() {
-    final List<KasirModel> displayList = _cashiers.isNotEmpty
-        ? _cashiers
-        : [
-            KasirModel(id: '#KSR-001', name: 'Rian', shift: 'Shift Pagi (08:00 - 12:00)'),
-            KasirModel(id: '#KSR-002', name: 'Siti', shift: 'Shift Siang (12:00 - 17:00)'),
-            KasirModel(id: '#KSR-003', name: 'Budi', shift: 'Shift Malam (17:00 - 22:00)'),
-          ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      backgroundColor: Colors.white,
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Kasir Bertugas',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              color: textDark,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Terhubung langsung ke Backend MariaDB',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: subTextGrey),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh_rounded, color: primaryGreen),
-                        tooltip: 'Muat ulang',
-                        onPressed: () async {
-                          Navigator.pop(ctx);
-                          await _loadCashiers();
-                          _showGantiAtauUbahKasirModal();
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  ...displayList.map((k) {
-                    final isSelected = _effectiveKasir.toLowerCase().contains(k.shortName.toLowerCase()) ||
-                        _effectiveKasir.toLowerCase().contains(k.name.toLowerCase());
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFFEBF7EE) : const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isSelected ? primaryGreen : const Color(0xFFE5E7EB),
-                          width: isSelected ? 1.5 : 1,
-                        ),
-                      ),
-                      child: ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isSelected ? primaryGreen : const Color(0xFFE5E7EB),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.person_rounded,
-                            color: isSelected ? Colors.white : const Color(0xFF4B5563),
-                            size: 20,
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Text(
-                              k.name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: isSelected ? primaryGreen : textDark,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE5E7EB),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                k.id,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF374151),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: Text(
-                          '${k.shiftName} • ${k.shiftHours}',
-                          style: const TextStyle(fontSize: 12, color: subTextGrey),
-                        ),
-                        trailing: isSelected
-                            ? const Icon(Icons.check_circle_rounded, color: primaryGreen, size: 22)
-                            : null,
-                        onTap: () async {
-                          Navigator.pop(ctx);
-                          setState(() {
-                            _currentKasir = k.shortName;
-                            _currentShift = k.shiftName;
-                          });
-                          await SettingsService.setLastKasir(k.shortName);
-                          await SecureStorageService().saveSession(
-                            kasir: k.shortName,
-                            shift: k.shiftName,
-                          );
-                        },
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -526,41 +372,31 @@ class _BerandaPageState extends State<BerandaPage> {
               ),
             ],
           ),
-          InkWell(
-            onTap: _showGantiAtauUbahKasirModal,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.badge_outlined,
-                    size: 15,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.badge_outlined,
+                  size: 15,
+                  color: textDark,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'Kasir: $namaKasir',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                     color: textDark,
                   ),
-                  const SizedBox(width: 5),
-                  Text(
-                    'Kasir: $namaKasir',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: textDark,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: subTextGrey,
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
