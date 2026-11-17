@@ -43,6 +43,7 @@ class TransactionItem {
   final int change;
   final List<TransactionItemDetail> details;
   final bool isToday;
+  final bool isCurrentShift;
   final String? date;
 
   TransactionItem({
@@ -59,6 +60,7 @@ class TransactionItem {
     this.change = 0,
     required this.details,
     this.isToday = true,
+    this.isCurrentShift = true,
     this.date,
   });
 }
@@ -80,14 +82,22 @@ class LogTransaksiPage extends StatefulWidget {
 class _LogTransaksiPageState extends State<LogTransaksiPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedFilter = 'Semua';
-  String _periodFilter = 'Hari Ini'; // 'Hari Ini' (default) atau 'Semua'
+  String _periodFilter = 'Saat Ini'; // 'Saat Ini' (pendapatan shift aktif) atau 'Hari Ini' (pendapatan hari itu)
 
   final Set<String> _expandedTrxIds = {};
 
   List<TransactionItem> _transactions = [];
   bool _isLoading = true;
 
-  // Stats Hari Ini (default harian / shift aktif)
+  // Stats Saat Ini (shift aktif saat ini)
+  int _shiftOmset = 0;
+  int _shiftCount = 0;
+  int _shiftTunaiOmset = 0;
+  int _shiftTunaiCount = 0;
+  int _shiftQrisOmset = 0;
+  int _shiftQrisCount = 0;
+
+  // Stats Hari Ini (seluruh transaksi hari itu)
   int _todayOmset = 0;
   int _todayCount = 0;
   int _todayTunaiOmset = 0;
@@ -95,20 +105,12 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   int _todayQrisOmset = 0;
   int _todayQrisCount = 0;
 
-  // Stats Semua Riwayat
-  int _allOmset = 0;
-  int _allCount = 0;
-  int _allTunaiOmset = 0;
-  int _allTunaiCount = 0;
-  int _allQrisOmset = 0;
-  int _allQrisCount = 0;
-
-  int get _totalOmset => _periodFilter == 'Hari Ini' ? _todayOmset : _allOmset;
-  int get _totalCount => _periodFilter == 'Hari Ini' ? _todayCount : _allCount;
-  int get _tunaiOmset => _periodFilter == 'Hari Ini' ? _todayTunaiOmset : _allTunaiOmset;
-  int get _tunaiCount => _periodFilter == 'Hari Ini' ? _todayTunaiCount : _allTunaiCount;
-  int get _qrisOmset => _periodFilter == 'Hari Ini' ? _todayQrisOmset : _allQrisOmset;
-  int get _qrisCount => _periodFilter == 'Hari Ini' ? _todayQrisCount : _allQrisCount;
+  int get _totalOmset => _periodFilter == 'Saat Ini' ? _shiftOmset : _todayOmset;
+  int get _totalCount => _periodFilter == 'Saat Ini' ? _shiftCount : _todayCount;
+  int get _tunaiOmset => _periodFilter == 'Saat Ini' ? _shiftTunaiOmset : _todayTunaiOmset;
+  int get _tunaiCount => _periodFilter == 'Saat Ini' ? _shiftTunaiCount : _todayTunaiCount;
+  int get _qrisOmset => _periodFilter == 'Saat Ini' ? _shiftQrisOmset : _todayQrisOmset;
+  int get _qrisCount => _periodFilter == 'Saat Ini' ? _shiftQrisCount : _todayQrisCount;
 
   Timer? _refreshTimer;
 
@@ -136,6 +138,13 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
     }
     try {
       final list = await ApiService.ambilRiwayatTransaksi();
+      int sOmset = 0;
+      int sCount = 0;
+      int sTunai = 0;
+      int sTunaiC = 0;
+      int sQris = 0;
+      int sQrisC = 0;
+
       int tOmset = 0;
       int tCount = 0;
       int tTunai = 0;
@@ -143,33 +152,22 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
       int tQris = 0;
       int tQrisC = 0;
 
-      int aOmset = 0;
-      int aCount = 0;
-      int aTunai = 0;
-      int aTunaiC = 0;
-      int aQris = 0;
-      int aQrisC = 0;
-
       List<TransactionItem> parsedList = [];
       for (var tx in list) {
         if (tx is Map) {
           final isTxToday = OmsetSummary.isToday(tx['created_at']);
+          final txShift = OmsetSummary.getShiftName(
+            tx['created_at'],
+            timeStr: tx['time']?.toString(),
+            cashier: tx['cashier']?.toString(),
+          );
+          final isTxCurrentShift = isTxToday && OmsetSummary.isShiftMatch(txShift, _effectiveShift);
+
           final amount = int.tryParse(tx['total']?.toString() ?? '0') ?? 0;
           final rawMethod = (tx['paymentMethod'] ?? 'TUNAI').toString().toUpperCase();
           final method = rawMethod.contains('QRIS') ? 'QRIS' : 'TUNAI';
 
-          // Akumulasi Semua Riwayat
-          aOmset += amount;
-          aCount++;
-          if (method == 'TUNAI') {
-            aTunai += amount;
-            aTunaiC++;
-          } else {
-            aQris += amount;
-            aQrisC++;
-          }
-
-          // Akumulasi Khusus Hari Ini
+          // Akumulasi Hari Ini (semua transaksi hari itu)
           if (isTxToday) {
             tOmset += amount;
             tCount++;
@@ -179,6 +177,19 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             } else {
               tQris += amount;
               tQrisC++;
+            }
+          }
+
+          // Akumulasi Saat Ini (khusus shift aktif saat ini)
+          if (isTxCurrentShift) {
+            sOmset += amount;
+            sCount++;
+            if (method == 'TUNAI') {
+              sTunai += amount;
+              sTunaiC++;
+            } else {
+              sQris += amount;
+              sQrisC++;
             }
           }
 
@@ -247,6 +258,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             change: 0,
             details: details,
             isToday: isTxToday,
+            isCurrentShift: isTxCurrentShift,
             date: dateStr,
           ));
         }
@@ -255,19 +267,19 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
       if (mounted) {
         setState(() {
           _transactions = parsedList;
+          _shiftOmset = sOmset;
+          _shiftCount = sCount;
+          _shiftTunaiOmset = sTunai;
+          _shiftTunaiCount = sTunaiC;
+          _shiftQrisOmset = sQris;
+          _shiftQrisCount = sQrisC;
+
           _todayOmset = tOmset;
           _todayCount = tCount;
           _todayTunaiOmset = tTunai;
           _todayTunaiCount = tTunaiC;
           _todayQrisOmset = tQris;
           _todayQrisCount = tQrisC;
-
-          _allOmset = aOmset;
-          _allCount = aCount;
-          _allTunaiOmset = aTunai;
-          _allTunaiCount = aTunaiC;
-          _allQrisOmset = aQris;
-          _allQrisCount = aQrisC;
 
           _isLoading = false;
         });
@@ -391,9 +403,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
 
   @override
   Widget build(BuildContext context) {
-    final periodList = _periodFilter == 'Hari Ini'
-        ? _transactions.where((t) => t.isToday).toList()
-        : _transactions;
+    final periodList = _periodFilter == 'Saat Ini'
+        ? _transactions.where((t) => t.isCurrentShift).toList()
+        : _transactions.where((t) => t.isToday).toList();
 
     final filteredList = _selectedFilter == 'Semua'
         ? periodList
@@ -490,9 +502,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                                     const SizedBox(height: 4),
                                     Text(
                                       _selectedFilter == 'Semua'
-                                          ? (_periodFilter == 'Hari Ini'
-                                              ? 'Belum ada transaksi hari ini di MariaDB'
-                                              : 'Transaksi kasir di MariaDB akan muncul di sini secara otomatis')
+                                          ? (_periodFilter == 'Saat Ini'
+                                              ? 'Belum ada transaksi pada shift ini ($_effectiveShift)'
+                                              : 'Belum ada transaksi hari ini di MariaDB')
                                           : 'Tidak ada transaksi dengan metode $_selectedFilter',
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(fontSize: 12, color: subTextGrey),
@@ -619,12 +631,11 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   }
 
   Widget _buildPeriodTab(String label, IconData icon, int count) {
-    final isSelected = (_periodFilter == 'Hari Ini' && label == 'Hari Ini') ||
-        (_periodFilter == 'Semua' && label == 'Semua Riwayat');
+    final isSelected = _periodFilter == label;
     return InkWell(
       onTap: () {
         setState(() {
-          _periodFilter = label == 'Hari Ini' ? 'Hari Ini' : 'Semua';
+          _periodFilter = label;
         });
       },
       borderRadius: BorderRadius.circular(20),
@@ -686,7 +697,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _periodFilter == 'Hari Ini' ? 'Pesanan Hari Ini' : 'Semua Riwayat Pesanan',
+                  _periodFilter == 'Saat Ini' ? 'Pesanan Shift Saat Ini' : 'Pesanan Hari Ini',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -738,9 +749,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
         const SizedBox(height: 10),
         Row(
           children: [
-            _buildPeriodTab('Hari Ini', Icons.today_rounded, _todayCount),
+            _buildPeriodTab('Saat Ini', Icons.access_time_rounded, _shiftCount),
             const SizedBox(width: 8),
-            _buildPeriodTab('Semua Riwayat', Icons.history_rounded, _allCount),
+            _buildPeriodTab('Hari Ini', Icons.calendar_today_rounded, _todayCount),
           ],
         ),
       ],
@@ -778,7 +789,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _periodFilter == 'Hari Ini' ? 'Omset Shift Saat Ini' : 'Total Omset Riwayat',
+                    _periodFilter == 'Saat Ini' ? 'Omset Shift Saat Ini' : 'Total Omset Hari Ini',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -795,7 +806,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  _effectiveShift,
+                  _periodFilter == 'Saat Ini' ? _effectiveShift : 'Hari Ini',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,

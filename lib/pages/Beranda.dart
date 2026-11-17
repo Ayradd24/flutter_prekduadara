@@ -124,7 +124,7 @@ class _BerandaPageState extends State<BerandaPage> {
 
   Future<void> _fetchOmsetData() async {
     try {
-      final summary = await ApiService.ambilOmsetSummary();
+      final summary = await ApiService.ambilOmsetSummary(shift: _effectiveShift);
       if (mounted) {
         setState(() {
           _totalOmset = summary.totalOmset;

@@ -129,9 +129,12 @@ class ApiService {
   }
 
   /// Ambil ringkasan omset shift dari database MariaDB (secara default hanya hari ini)
-  static Future<OmsetSummary> ambilOmsetSummary({bool todayOnly = true}) async {
+  static Future<OmsetSummary> ambilOmsetSummary({
+    bool todayOnly = true,
+    String? shift,
+  }) async {
     final list = await ambilRiwayatTransaksi();
-    return OmsetSummary.fromTransactions(list, todayOnly: todayOnly);
+    return OmsetSummary.fromTransactions(list, todayOnly: todayOnly, shift: shift);
   }
 
   /// Ambil daftar staf kasir dari database MariaDB
@@ -310,8 +313,50 @@ class OmsetSummary {
     return dt.year == now.year && dt.month == now.month && dt.day == now.day;
   }
 
+  /// Helper untuk mendeteksi nama shift dari jam atau kasir
+  static String getShiftName(dynamic rawCreated, {String? timeStr, String? cashier}) {
+    int? hour;
+    if (rawCreated != null) {
+      final dt = DateTime.tryParse(rawCreated.toString())?.toLocal();
+      if (dt != null) hour = dt.hour;
+    }
+    if (hour == null && timeStr != null && timeStr.contains(':')) {
+      final parts = timeStr.split(':');
+      hour = int.tryParse(parts[0].trim());
+    }
+
+    if (hour != null) {
+      if (hour >= 8 && hour < 12) return 'Shift Pagi';
+      if (hour >= 12 && hour < 17) return 'Shift Siang';
+      return 'Shift Malam';
+    }
+
+    if (cashier != null) {
+      final c = cashier.toLowerCase();
+      if (c.contains('rian')) return 'Shift Pagi';
+      if (c.contains('siti')) return 'Shift Siang';
+      if (c.contains('budi')) return 'Shift Malam';
+    }
+
+    return 'Shift Pagi';
+  }
+
+  /// Helper untuk mencocokkan shift
+  static bool isShiftMatch(String shiftA, String shiftB) {
+    final a = shiftA.toLowerCase();
+    final b = shiftB.toLowerCase();
+    if (a.contains('pagi') && b.contains('pagi')) return true;
+    if (a.contains('siang') && b.contains('siang')) return true;
+    if (a.contains('malam') && b.contains('malam')) return true;
+    return false;
+  }
+
   /// Hitung omset dari list transaksi. Secara default [todayOnly = true] hanya menghitung transaksi hari ini.
-  factory OmsetSummary.fromTransactions(List<dynamic> list, {bool todayOnly = true}) {
+  factory OmsetSummary.fromTransactions(
+    List<dynamic> list, {
+    bool todayOnly = true,
+    String? shift,
+  }) {
     int total = 0;
     int count = 0;
     int tunai = 0;
@@ -325,6 +370,16 @@ class OmsetSummary {
         if (todayOnly) {
           final isTxToday = isToday(tx['created_at']);
           if (!isTxToday) continue;
+        }
+
+        // Jika filter shift diberikan, lewati yang bukan di shift tersebut
+        if (shift != null && shift.isNotEmpty && shift != '-') {
+          final txShift = getShiftName(
+            tx['created_at'],
+            timeStr: tx['time']?.toString(),
+            cashier: tx['cashier']?.toString(),
+          );
+          if (!isShiftMatch(txShift, shift)) continue;
         }
 
         final amount = int.tryParse(tx['total']?.toString() ?? '0') ?? 0;
