@@ -3,12 +3,43 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Base URL backend PrekDuaDara
-  // Karena menggunakan kabel USB dengan 'adb reverse tcp:5000 tcp:5000',
-  // baik di Windows Desktop, Chrome, maupun HP Android (USB), 'http://localhost:5000/api' langsung terhubung ke laptop!
-  static String get baseUrl {
-    return 'http://localhost:5000/api';
+  // Daftar kandidat endpoint backend:
+  // 1. localhost:5000 (Untuk USB adb reverse, Windows Desktop, dan Chrome)
+  // 2. 192.168.10.120:5000 (IP Wi-Fi laptop, berfungsi bila HP di jaringan Wi-Fi sama)
+  // 3. 10.0.2.2:5000 (Untuk Android Emulator)
+  static final List<String> candidateUrls = [
+    'http://localhost:5000/api',
+    'http://192.168.10.120:5000/api',
+    'http://10.0.2.2:5000/api',
+  ];
+
+  static String? _workingBaseUrl;
+
+  /// Dapatkan base URL yang aktif
+  static Future<String> getBaseUrl() async {
+    if (_workingBaseUrl != null) {
+      return _workingBaseUrl!;
+    }
+
+    for (final candidate in candidateUrls) {
+      try {
+        final res = await http
+            .get(Uri.parse('$candidate/transactions'))
+            .timeout(const Duration(milliseconds: 1500));
+        if (res.statusCode == 200) {
+          _workingBaseUrl = candidate;
+          debugPrint('✅ ApiService terhubung ke: $candidate');
+          return candidate;
+        }
+      } catch (_) {
+        // Coba kandidat berikutnya
+      }
+    }
+
+    return candidateUrls.first;
   }
+
+  static String get baseUrl => _workingBaseUrl ?? candidateUrls.first;
 
   /// Kirim transaksi pemesanan baru ke database MariaDB
   static Future<Map<String, dynamic>> kirimPesanan({
@@ -17,62 +48,84 @@ class ApiService {
     String? cashier,
     required List<Map<String, dynamic>> items,
   }) async {
-    try {
-      final url = Uri.parse('$baseUrl/transactions');
-      final payload = jsonEncode({
-        'total': total,
-        'paymentMethod': paymentMethod, // 'Tunai' atau 'QRIS'
-        'cashier': cashier ?? 'Kasir Prek Dua Dara',
-        'items': items,
-      });
+    final activeBase = await getBaseUrl();
+    final orderedCandidates = [
+      activeBase,
+      ...candidateUrls.where((u) => u != activeBase),
+    ];
 
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: payload,
-          )
-          .timeout(const Duration(seconds: 10));
+    String lastError = 'Koneksi ke backend gagal';
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'message': data['message'] ?? 'Transaksi berhasil disimpan ke MariaDB',
-          'data': data['data'],
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Gagal menyimpan transaksi: HTTP ${response.statusCode}',
-        };
+    for (final base in orderedCandidates) {
+      try {
+        final url = Uri.parse('$base/transactions');
+        final payload = jsonEncode({
+          'total': total,
+          'paymentMethod': paymentMethod, // 'Tunai' atau 'QRIS'
+          'cashier': cashier ?? 'Kasir Prek Dua Dara',
+          'items': items,
+        });
+
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: payload,
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          _workingBaseUrl = base;
+          final data = jsonDecode(response.body);
+          debugPrint('✅ Berhasil kirim pesanan via $base');
+          return {
+            'success': true,
+            'message': data['message'] ?? 'Transaksi berhasil disimpan ke MariaDB',
+            'data': data['data'],
+            'activeUrl': base,
+          };
+        } else {
+          lastError = 'HTTP ${response.statusCode}: ${response.body}';
+        }
+      } catch (e) {
+        lastError = '$e';
+        debugPrint('Gagal kirim pesanan via $base: $e');
       }
-    } catch (e) {
-      debugPrint('Error ApiService.kirimPesanan: $e');
-      return {
-        'success': false,
-        'message': 'Koneksi ke backend gagal: $e',
-      };
     }
+
+    return {
+      'success': false,
+      'message': 'Gagal menyimpan transaksi: $lastError',
+    };
   }
 
   /// Ambil seluruh riwayat transaksi dari backend MariaDB
   static Future<List<dynamic>> ambilRiwayatTransaksi() async {
-    try {
-      final url = Uri.parse('$baseUrl/transactions');
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
+    final activeBase = await getBaseUrl();
+    final orderedCandidates = [
+      activeBase,
+      ...candidateUrls.where((u) => u != activeBase),
+    ];
 
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        if (json['success'] == true && json['data'] is List) {
-          return json['data'];
+    for (final base in orderedCandidates) {
+      try {
+        final url = Uri.parse('$base/transactions');
+        final response = await http.get(url).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body);
+          if (json['success'] == true && json['data'] is List) {
+            _workingBaseUrl = base;
+            debugPrint('✅ Ambil transaksi sukses dari $base: ${(json['data'] as List).length} item');
+            return json['data'];
+          }
         }
+      } catch (e) {
+        debugPrint('Gagal ambil riwayat dari $base: $e');
       }
-      return [];
-    } catch (e) {
-      debugPrint('Error ApiService.ambilRiwayatTransaksi: $e');
-      return [];
     }
+
+    return [];
   }
 
   /// Ambil ringkasan omset shift dari database MariaDB
@@ -83,9 +136,10 @@ class ApiService {
 
   /// Cek koneksi ke server backend
   static Future<bool> cekKoneksi() async {
+    final activeBase = await getBaseUrl();
     try {
-      final url = Uri.parse('$baseUrl/transactions');
-      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      final url = Uri.parse('$activeBase/transactions');
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
       return response.statusCode == 200;
     } catch (_) {
       return false;

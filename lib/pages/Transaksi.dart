@@ -188,12 +188,31 @@ class _TransaksiPageState extends State<TransaksiPage> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFFA7F3D0)),
                 ),
-                child: const Text(
-                  '✓ Tersimpan di Database MariaDB',
-                  style: TextStyle(
+                child: Text(
+                  '✓ Tersimpan di MariaDB (${apiResult['data']?['id'] ?? 'TRX'})',
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF047857),
+                  ),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Text(
+                  '⚠ ${apiResult['message'] ?? 'Koneksi ke server gagal'}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFDC2626),
                   ),
                 ),
               ),

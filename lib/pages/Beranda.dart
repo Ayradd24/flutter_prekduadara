@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
@@ -38,6 +39,7 @@ class _BerandaPageState extends State<BerandaPage> {
   int _qrisOmset = 0;
   int _qrisCount = 0;
   bool _isLoadingOmset = true;
+  Timer? _omsetTimer;
 
   String get _effectiveKasir {
     if (widget.currentKasir != null && widget.currentKasir!.isNotEmpty && widget.currentKasir != 'Pilih Kasir') {
@@ -70,6 +72,15 @@ class _BerandaPageState extends State<BerandaPage> {
     super.initState();
     _loadProductsFromDatabase();
     _fetchOmsetData();
+    _omsetTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) _fetchOmsetData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _omsetTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchOmsetData() async {

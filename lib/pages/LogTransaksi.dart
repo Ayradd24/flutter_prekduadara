@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -85,15 +86,27 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   int _tunaiCount = 0;
   int _qrisOmset = 0;
   int _qrisCount = 0;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _fetchTransactions();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted) _fetchTransactions();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _fetchTransactions() async {
-    setState(() => _isLoading = true);
+    if (_transactions.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final list = await ApiService.ambilRiwayatTransaksi();
       int total = 0;
