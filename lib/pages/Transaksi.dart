@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../widget/app_drawer.dart';
 import 'Beranda.dart';
+import '../services/api_service.dart';
+import '../services/settings_service.dart';
 
 // Palette warna konsisten tema PrekDuaDara
 const Color bgYellow = Color(0xFFFBBF24);
@@ -127,10 +129,31 @@ class _TransaksiPageState extends State<TransaksiPage> {
   int get _grandTotal => _subtotal;
 
 
-  void _showSuccessDialog({int? bayar, int? kembalian, String? catatan}) {
+  void _showSuccessDialog({int? bayar, int? kembalian, String? catatan}) async {
     setState(() {
       _isTransactionCompleted = true;
     });
+
+    // Ambil kasir yang sedang bertugas dari session/settings
+    final kasirName = await SettingsService.getLastKasir() ?? 'Rian Pratama';
+
+    // Siapkan rincian item pesanan untuk database MariaDB
+    final itemsPayload = _orderedItems.map((item) => {
+      'name': item.menuItem.title,
+      'price': item.menuItem.price,
+      'quantity': item.quantity,
+      'subtotal': item.totalPrice,
+    }).toList();
+
+    // Kirim pesanan ke backend MariaDB
+    final apiResult = await ApiService.kirimPesanan(
+      total: _grandTotal,
+      paymentMethod: _paymentMethod,
+      cashier: kasirName,
+      items: itemsPayload,
+    );
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -156,6 +179,44 @@ class _TransaksiPageState extends State<TransaksiPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: subTextGrey, height: 1.4),
             ),
+            if (apiResult['success'] == true) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F8F0),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFA7F3D0)),
+                ),
+                child: Text(
+                  '✓ Tersimpan di MariaDB (${apiResult['data']?['id'] ?? 'TRX'})',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF047857),
+                  ),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Text(
+                  '⚠ ${apiResult['message'] ?? 'Koneksi ke server gagal'}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
