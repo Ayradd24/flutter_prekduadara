@@ -1,45 +1,140 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Daftar kandidat endpoint backend:
+  // Daftar kandidat endpoint backend statis:
   // 1. localhost:5000 (Untuk USB adb reverse, Windows Desktop, dan Chrome)
-  // 2. 192.168.10.120:5000 (IP Wi-Fi laptop, berfungsi bila HP di jaringan Wi-Fi sama)
-  // 3. 10.0.2.2:5000 (Untuk Android Emulator)
-  static final List<String> candidateUrls = [
+  // 2. 10.0.2.2:5000 (Untuk Android Emulator)
+  static final List<String> _staticCandidates = [
     'http://localhost:5000/api',
-    'http://192.168.10.120:5000/api',
     'http://10.0.2.2:5000/api',
   ];
 
   static String? _workingBaseUrl;
 
-  /// Dapatkan base URL yang aktif
+  /// Dapatkan base URL yang aktif.
+  /// Otomatis mendeteksi IP backend di jaringan Wi-Fi manapun.
   static Future<String> getBaseUrl() async {
+    // 1. Cek apakah URL yang di-cache masih aktif
     if (_workingBaseUrl != null) {
-      return _workingBaseUrl!;
+      try {
+        final res = await http
+            .get(Uri.parse('$_workingBaseUrl/transactions'))
+            .timeout(const Duration(milliseconds: 1200));
+        if (res.statusCode == 200) return _workingBaseUrl!;
+      } catch (_) {
+        debugPrint('⚠️ Cached URL $_workingBaseUrl tidak responsif, mencari ulang...');
+        _workingBaseUrl = null;
+      }
     }
 
-    for (final candidate in candidateUrls) {
+    // 2. Coba kandidat statis (localhost / emulator)
+    for (final candidate in _staticCandidates) {
       try {
         final res = await http
             .get(Uri.parse('$candidate/transactions'))
-            .timeout(const Duration(milliseconds: 1500));
+            .timeout(const Duration(milliseconds: 1200));
         if (res.statusCode == 200) {
           _workingBaseUrl = candidate;
           debugPrint('✅ ApiService terhubung ke: $candidate');
           return candidate;
         }
-      } catch (_) {
-        // Coba kandidat berikutnya
-      }
+      } catch (_) {}
     }
 
-    return candidateUrls.first;
+    // 3. Auto-discovery: scan subnet Wi-Fi untuk menemukan backend
+    final discovered = await _discoverBackendOnSubnet();
+    if (discovered != null) {
+      _workingBaseUrl = discovered;
+      debugPrint('✅ ApiService auto-discovered backend: $discovered');
+      return discovered;
+    }
+
+    debugPrint('❌ Tidak dapat menemukan backend di jaringan manapun');
+    return _staticCandidates.first;
   }
 
-  static String get baseUrl => _workingBaseUrl ?? candidateUrls.first;
+  static String get baseUrl => _workingBaseUrl ?? _staticCandidates.first;
+
+  /// Reset cache URL agar discovery dijalankan ulang (panggil saat ganti Wi-Fi)
+  static void resetConnection() {
+    _workingBaseUrl = null;
+    debugPrint('🔄 Koneksi backend di-reset, akan auto-discover saat request berikutnya');
+  }
+
+  /// Scan seluruh subnet Wi-Fi untuk menemukan server backend pada port 5000.
+  /// Menggunakan TCP port scan paralel (cepat, ~300ms) lalu verifikasi HTTP.
+  static Future<String?> _discoverBackendOnSubnet() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+      );
+
+      final Set<String> subnets = {};
+      for (var iface in interfaces) {
+        for (var addr in iface.addresses) {
+          final ip = addr.address;
+          if (ip.startsWith('127.')) continue; // Skip loopback
+          final parts = ip.split('.');
+          if (parts.length == 4) {
+            subnets.add('${parts[0]}.${parts[1]}.${parts[2]}');
+          }
+        }
+      }
+
+      if (subnets.isEmpty) return null;
+
+      debugPrint('🔍 Scanning ${subnets.length} subnet(s) untuk backend: $subnets');
+
+      for (var subnet in subnets) {
+        // Scan port 5000 pada semua 254 host secara paralel
+        final futures = <Future<String?>>[];
+        for (int i = 1; i <= 254; i++) {
+          futures.add(_checkPort('$subnet.$i', 5000));
+        }
+
+        final results = await Future.wait(futures);
+        final openHosts = results.where((ip) => ip != null).toList();
+
+        debugPrint('🔍 Subnet $subnet.* → ${openHosts.length} host dengan port 5000 terbuka');
+
+        // Verifikasi mana yang benar-benar backend PrekDuaDara
+        for (var ip in openHosts) {
+          if (ip == null) continue;
+          final url = 'http://$ip:5000/api';
+          try {
+            final res = await http
+                .get(Uri.parse('$url/transactions'))
+                .timeout(const Duration(milliseconds: 1500));
+            if (res.statusCode == 200) {
+              return url;
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Subnet discovery error: $e');
+    }
+    return null;
+  }
+
+  /// Cek apakah sebuah IP membuka port tertentu (TCP connect test)
+  static Future<String?> _checkPort(String ip, int port) async {
+    try {
+      final socket = await Socket.connect(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 400),
+      );
+      socket.destroy();
+      return ip;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Kirim transaksi pemesanan baru ke database MariaDB
   static Future<Map<String, dynamic>> kirimPesanan({
@@ -49,48 +144,43 @@ class ApiService {
     required List<Map<String, dynamic>> items,
   }) async {
     final activeBase = await getBaseUrl();
-    final orderedCandidates = [
-      activeBase,
-      ...candidateUrls.where((u) => u != activeBase),
-    ];
 
     String lastError = 'Koneksi ke backend gagal';
 
-    for (final base in orderedCandidates) {
-      try {
-        final url = Uri.parse('$base/transactions');
-        final payload = jsonEncode({
-          'total': total,
-          'paymentMethod': paymentMethod, // 'Tunai' atau 'QRIS'
-          'cashier': cashier ?? 'Kasir Prek Dua Dara',
-          'items': items,
-        });
+    try {
+      final url = Uri.parse('$activeBase/transactions');
+      final payload = jsonEncode({
+        'total': total,
+        'paymentMethod': paymentMethod,
+        'cashier': cashier ?? 'Kasir Prek Dua Dara',
+        'items': items,
+      });
 
-        final response = await http
-            .post(
-              url,
-              headers: {'Content-Type': 'application/json'},
-              body: payload,
-            )
-            .timeout(const Duration(seconds: 5));
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 5));
 
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          _workingBaseUrl = base;
-          final data = jsonDecode(response.body);
-          debugPrint('✅ Berhasil kirim pesanan via $base');
-          return {
-            'success': true,
-            'message': data['message'] ?? 'Transaksi berhasil disimpan ke MariaDB',
-            'data': data['data'],
-            'activeUrl': base,
-          };
-        } else {
-          lastError = 'HTTP ${response.statusCode}: ${response.body}';
-        }
-      } catch (e) {
-        lastError = '$e';
-        debugPrint('Gagal kirim pesanan via $base: $e');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        debugPrint('✅ Berhasil kirim pesanan via $activeBase');
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Transaksi berhasil disimpan ke MariaDB',
+          'data': data['data'],
+          'activeUrl': activeBase,
+        };
+      } else {
+        lastError = 'HTTP ${response.statusCode}: ${response.body}';
       }
+    } catch (e) {
+      lastError = '$e';
+      debugPrint('Gagal kirim pesanan via $activeBase: $e');
+      // Reset agar discovery ulang di request berikutnya
+      _workingBaseUrl = null;
     }
 
     return {
@@ -102,27 +192,21 @@ class ApiService {
   /// Ambil seluruh riwayat transaksi dari backend MariaDB
   static Future<List<dynamic>> ambilRiwayatTransaksi() async {
     final activeBase = await getBaseUrl();
-    final orderedCandidates = [
-      activeBase,
-      ...candidateUrls.where((u) => u != activeBase),
-    ];
 
-    for (final base in orderedCandidates) {
-      try {
-        final url = Uri.parse('$base/transactions');
-        final response = await http.get(url).timeout(const Duration(seconds: 4));
+    try {
+      final url = Uri.parse('$activeBase/transactions');
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
 
-        if (response.statusCode == 200) {
-          final json = jsonDecode(response.body);
-          if (json['success'] == true && json['data'] is List) {
-            _workingBaseUrl = base;
-            debugPrint('✅ Ambil transaksi sukses dari $base: ${(json['data'] as List).length} item');
-            return json['data'];
-          }
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true && json['data'] is List) {
+          debugPrint('✅ Ambil transaksi sukses dari $activeBase: ${(json['data'] as List).length} item');
+          return json['data'];
         }
-      } catch (e) {
-        debugPrint('Gagal ambil riwayat dari $base: $e');
       }
+    } catch (e) {
+      debugPrint('Gagal ambil riwayat dari $activeBase: $e');
+      _workingBaseUrl = null;
     }
 
     return [];
@@ -146,29 +230,23 @@ class ApiService {
   /// Ambil daftar staf kasir dari database MariaDB
   static Future<List<KasirModel>> ambilDaftarKasir() async {
     final activeBase = await getBaseUrl();
-    final orderedCandidates = [
-      activeBase,
-      ...candidateUrls.where((u) => u != activeBase),
-    ];
 
-    for (final base in orderedCandidates) {
-      try {
-        final url = Uri.parse('$base/cashiers');
-        final response = await http.get(url).timeout(const Duration(seconds: 4));
+    try {
+      final url = Uri.parse('$activeBase/cashiers');
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
 
-        if (response.statusCode == 200) {
-          final json = jsonDecode(response.body);
-          if (json['success'] == true && json['data'] is List) {
-            _workingBaseUrl = base;
-            final list = (json['data'] as List)
-                .map((item) => KasirModel.fromJson(item as Map<String, dynamic>))
-                .toList();
-            return list;
-          }
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true && json['data'] is List) {
+          final list = (json['data'] as List)
+              .map((item) => KasirModel.fromJson(item as Map<String, dynamic>))
+              .toList();
+          return list;
         }
-      } catch (e) {
-        debugPrint('Gagal ambil daftar kasir dari $base: $e');
       }
+    } catch (e) {
+      debugPrint('Gagal ambil daftar kasir: $e');
+      _workingBaseUrl = null;
     }
 
     return [];
@@ -181,50 +259,43 @@ class ApiService {
     String? shift,
   }) async {
     final activeBase = await getBaseUrl();
-    final orderedCandidates = [
-      activeBase,
-      ...candidateUrls.where((u) => u != activeBase),
-    ];
 
-    String lastError = 'Koneksi ke backend gagal';
+    try {
+      final encodedId = Uri.encodeComponent(idOrCode);
+      final url = Uri.parse('$activeBase/cashiers/$encodedId');
+      final Map<String, dynamic> bodyData = {'name': newName.trim()};
+      if (shift != null) bodyData['shift'] = shift;
+      final payload = jsonEncode(bodyData);
 
-    for (final base in orderedCandidates) {
-      try {
-        final encodedId = Uri.encodeComponent(idOrCode);
-        final url = Uri.parse('$base/cashiers/$encodedId');
-        final Map<String, dynamic> bodyData = {'name': newName.trim()};
-        if (shift != null) bodyData['shift'] = shift;
-        final payload = jsonEncode(bodyData);
+      final response = await http
+          .put(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 5));
 
-        final response = await http
-            .put(
-              url,
-              headers: {'Content-Type': 'application/json'},
-              body: payload,
-            )
-            .timeout(const Duration(seconds: 5));
-
-        if (response.statusCode == 200) {
-          _workingBaseUrl = base;
-          final json = jsonDecode(response.body);
-          return {
-            'success': true,
-            'message': json['message'] ?? 'Nama kasir berhasil diperbarui',
-            'data': json['data'],
-          };
-        } else {
-          lastError = 'HTTP ${response.statusCode}: ${response.body}';
-        }
-      } catch (e) {
-        lastError = '$e';
-        debugPrint('Gagal update nama kasir via $base: $e');
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return {
+          'success': true,
+          'message': json['message'] ?? 'Nama kasir berhasil diperbarui',
+          'data': json['data'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
       }
+    } catch (e) {
+      debugPrint('Gagal update nama kasir: $e');
+      _workingBaseUrl = null;
+      return {
+        'success': false,
+        'message': 'Gagal memperbarui nama kasir: $e',
+      };
     }
-
-    return {
-      'success': false,
-      'message': 'Gagal memperbarui nama kasir: $lastError',
-    };
   }
 
   /// Tambah staf kasir baru ke database MariaDB
@@ -233,50 +304,43 @@ class ApiService {
     required String shift,
   }) async {
     final activeBase = await getBaseUrl();
-    final orderedCandidates = [
-      activeBase,
-      ...candidateUrls.where((u) => u != activeBase),
-    ];
 
-    String lastError = 'Koneksi ke backend gagal';
+    try {
+      final url = Uri.parse('$activeBase/cashiers');
+      final payload = jsonEncode({
+        'name': name.trim(),
+        'shift': shift,
+      });
 
-    for (final base in orderedCandidates) {
-      try {
-        final url = Uri.parse('$base/cashiers');
-        final payload = jsonEncode({
-          'name': name.trim(),
-          'shift': shift,
-        });
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 5));
 
-        final response = await http
-            .post(
-              url,
-              headers: {'Content-Type': 'application/json'},
-              body: payload,
-            )
-            .timeout(const Duration(seconds: 5));
-
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          _workingBaseUrl = base;
-          final json = jsonDecode(response.body);
-          return {
-            'success': true,
-            'message': json['message'] ?? 'Kasir baru berhasil didaftarkan',
-            'data': json['data'],
-          };
-        } else {
-          lastError = 'HTTP ${response.statusCode}: ${response.body}';
-        }
-      } catch (e) {
-        lastError = '$e';
-        debugPrint('Gagal tambah kasir via $base: $e');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        return {
+          'success': true,
+          'message': json['message'] ?? 'Kasir baru berhasil didaftarkan',
+          'data': json['data'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'HTTP ${response.statusCode}: ${response.body}',
+        };
       }
+    } catch (e) {
+      debugPrint('Gagal tambah kasir: $e');
+      _workingBaseUrl = null;
+      return {
+        'success': false,
+        'message': 'Gagal menambahkan kasir: $e',
+      };
     }
-
-    return {
-      'success': false,
-      'message': 'Gagal menambahkan kasir: $lastError',
-    };
   }
 
   /// Cek koneksi ke server backend
