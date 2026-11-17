@@ -82,6 +82,16 @@ class _BerandaPageState extends State<BerandaPage> {
     super.initState();
     _currentKasir = widget.currentKasir;
     _currentShift = widget.currentShift;
+    if (_currentKasir == null) {
+      SettingsService.getLastKasir().then((saved) {
+        if (saved != null && saved.isNotEmpty && mounted) {
+          setState(() {
+            _currentKasir = saved;
+          });
+          _fetchOmsetData();
+        }
+      });
+    }
     _loadProductsFromDatabase();
     _loadCashiers();
     _fetchOmsetData();
@@ -124,7 +134,10 @@ class _BerandaPageState extends State<BerandaPage> {
 
   Future<void> _fetchOmsetData() async {
     try {
-      final summary = await ApiService.ambilOmsetSummary(shift: _effectiveShift);
+      final summary = await ApiService.ambilOmsetSummary(
+        shift: _effectiveShift,
+        cashier: _effectiveKasir,
+      );
       if (mounted) {
         setState(() {
           _totalOmset = summary.totalOmset;
@@ -915,6 +928,8 @@ class _BerandaPageState extends State<BerandaPage> {
             MaterialPageRoute(
               builder: (context) => TransaksiPage(
                 initialItemCounts: _itemCounts,
+                currentKasir: _effectiveKasir,
+                currentShift: _effectiveShift,
               ),
             ),
           );

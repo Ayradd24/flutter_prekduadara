@@ -132,9 +132,15 @@ class ApiService {
   static Future<OmsetSummary> ambilOmsetSummary({
     bool todayOnly = true,
     String? shift,
+    String? cashier,
   }) async {
     final list = await ambilRiwayatTransaksi();
-    return OmsetSummary.fromTransactions(list, todayOnly: todayOnly, shift: shift);
+    return OmsetSummary.fromTransactions(
+      list,
+      todayOnly: todayOnly,
+      shift: shift,
+      cashier: cashier,
+    );
   }
 
   /// Ambil daftar staf kasir dari database MariaDB
@@ -313,8 +319,66 @@ class OmsetSummary {
     return dt.year == now.year && dt.month == now.month && dt.day == now.day;
   }
 
-  /// Helper untuk mendeteksi nama shift dari jam atau kasir
+  /// Helper untuk mencocokkan apakah transaksi dilayani oleh kasir tertentu
+  static bool isCashierMatch(String? txCashier, String? targetCashier) {
+    if (txCashier == null || targetCashier == null) return false;
+    final tx = txCashier.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+    final target = targetCashier.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+    if (tx.isEmpty || target.isEmpty) return false;
+
+    if (tx == target) return true;
+
+    // Cek kecocokan nama depan (misal "Rian" dengan "Rian Pratama")
+    final txFirst = tx.split(RegExp(r'\s+')).first;
+    final targetFirst = target.split(RegExp(r'\s+')).first;
+    if (txFirst.isNotEmpty && targetFirst.isNotEmpty && txFirst == targetFirst) {
+      return true;
+    }
+
+    return tx.contains(target) || target.contains(tx);
+  }
+
+  /// Helper untuk mendeteksi apakah transaksi jelas-jelas milik kasir staf lain
+  static bool isDifferentCashier(String? txCashier, String? currentCashier) {
+    if (txCashier == null || currentCashier == null) return false;
+    final tx = txCashier.toLowerCase();
+    final cur = currentCashier.toLowerCase();
+
+    const knownCashiers = ['rian', 'siti', 'budi'];
+    String? txKnown;
+    for (var k in knownCashiers) {
+      if (tx.contains(k)) {
+        txKnown = k;
+        break;
+      }
+    }
+
+    String? curKnown;
+    for (var k in knownCashiers) {
+      if (cur.contains(k)) {
+        curKnown = k;
+        break;
+      }
+    }
+
+    if (txKnown != null && curKnown != null) {
+      return txKnown != curKnown;
+    }
+
+    return false;
+  }
+
+  /// Helper untuk mendeteksi nama shift dari kasir atau jam
   static String getShiftName(dynamic rawCreated, {String? timeStr, String? cashier}) {
+    // 1. PRIORITAS UTAMA: Nama kasir yang tercatat pada transaksi
+    if (cashier != null && cashier.trim().isNotEmpty) {
+      final c = cashier.toLowerCase();
+      if (c.contains('rian')) return 'Shift Pagi';
+      if (c.contains('siti')) return 'Shift Siang';
+      if (c.contains('budi')) return 'Shift Malam';
+    }
+
+    // 2. FALLBACK: Jam transaksi jika kasir tidak spesifik
     int? hour;
     if (rawCreated != null) {
       final dt = DateTime.tryParse(rawCreated.toString())?.toLocal();
@@ -329,13 +393,6 @@ class OmsetSummary {
       if (hour >= 8 && hour < 12) return 'Shift Pagi';
       if (hour >= 12 && hour < 17) return 'Shift Siang';
       return 'Shift Malam';
-    }
-
-    if (cashier != null) {
-      final c = cashier.toLowerCase();
-      if (c.contains('rian')) return 'Shift Pagi';
-      if (c.contains('siti')) return 'Shift Siang';
-      if (c.contains('budi')) return 'Shift Malam';
     }
 
     return 'Shift Pagi';
@@ -356,6 +413,7 @@ class OmsetSummary {
     List<dynamic> list, {
     bool todayOnly = true,
     String? shift,
+    String? cashier,
   }) {
     int total = 0;
     int count = 0;
@@ -372,12 +430,31 @@ class OmsetSummary {
           if (!isTxToday) continue;
         }
 
-        // Jika filter shift diberikan, lewati yang bukan di shift tersebut
-        if (shift != null && shift.isNotEmpty && shift != '-') {
+        // Cek kepemilikan kasir / shift
+        final txCashier = tx['cashier']?.toString();
+        final hasCashier = cashier != null && cashier.isNotEmpty && cashier != 'Pilih Kasir';
+        final hasShift = shift != null && shift.isNotEmpty && shift != '-';
+
+        if (hasCashier) {
+          if (isCashierMatch(txCashier, cashier)) {
+            // Cocok langsung dengan kasir aktif!
+          } else if (isDifferentCashier(txCashier, cashier)) {
+            // Jelas milik kasir staf lain (misal Rian vs Budi), lewati!
+            continue;
+          } else if (hasShift) {
+            // Kasir generic/tidak dikenal, cocokkan berdasarkan shift
+            final txShift = getShiftName(
+              tx['created_at'],
+              timeStr: tx['time']?.toString(),
+              cashier: txCashier,
+            );
+            if (!isShiftMatch(txShift, shift)) continue;
+          }
+        } else if (hasShift) {
           final txShift = getShiftName(
             tx['created_at'],
             timeStr: tx['time']?.toString(),
-            cashier: tx['cashier']?.toString(),
+            cashier: txCashier,
           );
           if (!isShiftMatch(txShift, shift)) continue;
         }

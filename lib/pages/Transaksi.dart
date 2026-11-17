@@ -46,10 +46,14 @@ class OrderItem {
 
 class TransaksiPage extends StatefulWidget {
   final Map<String, int>? initialItemCounts;
+  final String? currentKasir;
+  final String? currentShift;
 
   const TransaksiPage({
     super.key,
     this.initialItemCounts,
+    this.currentKasir,
+    this.currentShift,
   });
 
   @override
@@ -134,8 +138,11 @@ class _TransaksiPageState extends State<TransaksiPage> {
       _isTransactionCompleted = true;
     });
 
-    // Ambil kasir yang sedang bertugas dari session/settings
-    final kasirName = await SettingsService.getLastKasir() ?? 'Rian Pratama';
+    // Ambil kasir yang sedang bertugas dari widget/settings
+    final savedKasir = await SettingsService.getLastKasir();
+    final kasirName = (widget.currentKasir != null && widget.currentKasir!.isNotEmpty)
+        ? widget.currentKasir!
+        : (savedKasir ?? 'Rian');
 
     // Siapkan rincian item pesanan untuk database MariaDB
     final itemsPayload = _orderedItems.map((item) => {
@@ -236,7 +243,10 @@ class _TransaksiPageState extends State<TransaksiPage> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const BerandaPage(),
+                      builder: (context) => BerandaPage(
+                        currentKasir: widget.currentKasir,
+                        currentShift: widget.currentShift,
+                      ),
                     ),
                   );
                 }
@@ -842,7 +852,10 @@ class _TransaksiPageState extends State<TransaksiPage> {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const BerandaPage(),
+                  builder: (context) => BerandaPage(
+                    currentKasir: widget.currentKasir,
+                    currentShift: widget.currentShift,
+                  ),
                 ),
               );
             }

@@ -156,12 +156,23 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
       for (var tx in list) {
         if (tx is Map) {
           final isTxToday = OmsetSummary.isToday(tx['created_at']);
-          final txShift = OmsetSummary.getShiftName(
-            tx['created_at'],
-            timeStr: tx['time']?.toString(),
-            cashier: tx['cashier']?.toString(),
-          );
-          final isTxCurrentShift = isTxToday && OmsetSummary.isShiftMatch(txShift, _effectiveShift);
+          final txCashier = tx['cashier']?.toString();
+
+          bool isTxCurrentShift = false;
+          if (isTxToday) {
+            if (OmsetSummary.isCashierMatch(txCashier, _namaKasir)) {
+              isTxCurrentShift = true;
+            } else if (OmsetSummary.isDifferentCashier(txCashier, _namaKasir)) {
+              isTxCurrentShift = false;
+            } else {
+              final txShift = OmsetSummary.getShiftName(
+                tx['created_at'],
+                timeStr: tx['time']?.toString(),
+                cashier: txCashier,
+              );
+              isTxCurrentShift = OmsetSummary.isShiftMatch(txShift, _effectiveShift);
+            }
+          }
 
           final amount = int.tryParse(tx['total']?.toString() ?? '0') ?? 0;
           final rawMethod = (tx['paymentMethod'] ?? 'TUNAI').toString().toUpperCase();
