@@ -41,6 +41,8 @@ class TransactionItem {
   final int cashReceived;
   final int change;
   final List<TransactionItemDetail> details;
+  final bool isToday;
+  final String? date;
 
   TransactionItem({
     required this.id,
@@ -55,6 +57,8 @@ class TransactionItem {
     this.cashReceived = 0,
     this.change = 0,
     required this.details,
+    this.isToday = true,
+    this.date,
   });
 }
 
@@ -75,17 +79,36 @@ class LogTransaksiPage extends StatefulWidget {
 class _LogTransaksiPageState extends State<LogTransaksiPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedFilter = 'Semua';
+  String _periodFilter = 'Hari Ini'; // 'Hari Ini' (default) atau 'Semua'
 
   final Set<String> _expandedTrxIds = {};
 
   List<TransactionItem> _transactions = [];
   bool _isLoading = true;
-  int _totalOmset = 0;
-  int _totalCount = 0;
-  int _tunaiOmset = 0;
-  int _tunaiCount = 0;
-  int _qrisOmset = 0;
-  int _qrisCount = 0;
+
+  // Stats Hari Ini (default harian / shift aktif)
+  int _todayOmset = 0;
+  int _todayCount = 0;
+  int _todayTunaiOmset = 0;
+  int _todayTunaiCount = 0;
+  int _todayQrisOmset = 0;
+  int _todayQrisCount = 0;
+
+  // Stats Semua Riwayat
+  int _allOmset = 0;
+  int _allCount = 0;
+  int _allTunaiOmset = 0;
+  int _allTunaiCount = 0;
+  int _allQrisOmset = 0;
+  int _allQrisCount = 0;
+
+  int get _totalOmset => _periodFilter == 'Hari Ini' ? _todayOmset : _allOmset;
+  int get _totalCount => _periodFilter == 'Hari Ini' ? _todayCount : _allCount;
+  int get _tunaiOmset => _periodFilter == 'Hari Ini' ? _todayTunaiOmset : _allTunaiOmset;
+  int get _tunaiCount => _periodFilter == 'Hari Ini' ? _todayTunaiCount : _allTunaiCount;
+  int get _qrisOmset => _periodFilter == 'Hari Ini' ? _todayQrisOmset : _allQrisOmset;
+  int get _qrisCount => _periodFilter == 'Hari Ini' ? _todayQrisCount : _allQrisCount;
+
   Timer? _refreshTimer;
 
   @override
@@ -109,28 +132,50 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
     }
     try {
       final list = await ApiService.ambilRiwayatTransaksi();
-      int total = 0;
-      int count = 0;
-      int tunai = 0;
-      int tunaiC = 0;
-      int qris = 0;
-      int qrisC = 0;
+      int tOmset = 0;
+      int tCount = 0;
+      int tTunai = 0;
+      int tTunaiC = 0;
+      int tQris = 0;
+      int tQrisC = 0;
+
+      int aOmset = 0;
+      int aCount = 0;
+      int aTunai = 0;
+      int aTunaiC = 0;
+      int aQris = 0;
+      int aQrisC = 0;
 
       List<TransactionItem> parsedList = [];
       for (var tx in list) {
         if (tx is Map) {
+          final isTxToday = OmsetSummary.isToday(tx['created_at']);
           final amount = int.tryParse(tx['total']?.toString() ?? '0') ?? 0;
           final rawMethod = (tx['paymentMethod'] ?? 'TUNAI').toString().toUpperCase();
           final method = rawMethod.contains('QRIS') ? 'QRIS' : 'TUNAI';
 
-          total += amount;
-          count++;
+          // Akumulasi Semua Riwayat
+          aOmset += amount;
+          aCount++;
           if (method == 'TUNAI') {
-            tunai += amount;
-            tunaiC++;
+            aTunai += amount;
+            aTunaiC++;
           } else {
-            qris += amount;
-            qrisC++;
+            aQris += amount;
+            aQrisC++;
+          }
+
+          // Akumulasi Khusus Hari Ini
+          if (isTxToday) {
+            tOmset += amount;
+            tCount++;
+            if (method == 'TUNAI') {
+              tTunai += amount;
+              tTunaiC++;
+            } else {
+              tQris += amount;
+              tQrisC++;
+            }
           }
 
           // Parse details
@@ -175,6 +220,15 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
           final id = rawId.startsWith('#') ? rawId : '#$rawId';
           final cashierName = tx['cashier']?.toString() ?? _namaKasir;
 
+          // Format tanggal transaksi
+          String? dateStr;
+          if (tx['created_at'] != null) {
+            final dt = DateTime.tryParse(tx['created_at'].toString())?.toLocal();
+            if (dt != null) {
+              dateStr = '${dt.day}/${dt.month}/${dt.year}';
+            }
+          }
+
           parsedList.add(TransactionItem(
             id: id,
             time: tx['time']?.toString() ?? '12:00',
@@ -188,6 +242,8 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             cashReceived: amount,
             change: 0,
             details: details,
+            isToday: isTxToday,
+            date: dateStr,
           ));
         }
       }
@@ -195,12 +251,20 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
       if (mounted) {
         setState(() {
           _transactions = parsedList;
-          _totalOmset = total;
-          _totalCount = count;
-          _tunaiOmset = tunai;
-          _tunaiCount = tunaiC;
-          _qrisOmset = qris;
-          _qrisCount = qrisC;
+          _todayOmset = tOmset;
+          _todayCount = tCount;
+          _todayTunaiOmset = tTunai;
+          _todayTunaiCount = tTunaiC;
+          _todayQrisOmset = tQris;
+          _todayQrisCount = tQrisC;
+
+          _allOmset = aOmset;
+          _allCount = aCount;
+          _allTunaiOmset = aTunai;
+          _allTunaiCount = aTunaiC;
+          _allQrisOmset = aQris;
+          _allQrisCount = aQrisC;
+
           _isLoading = false;
         });
       }
@@ -318,9 +382,13 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
 
   @override
   Widget build(BuildContext context) {
+    final periodList = _periodFilter == 'Hari Ini'
+        ? _transactions.where((t) => t.isToday).toList()
+        : _transactions;
+
     final filteredList = _selectedFilter == 'Semua'
-        ? _transactions
-        : _transactions
+        ? periodList
+        : periodList
             .where((t) => t.paymentMethod.toUpperCase() == _selectedFilter.toUpperCase())
             .toList();
 
@@ -413,7 +481,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                                     const SizedBox(height: 4),
                                     Text(
                                       _selectedFilter == 'Semua'
-                                          ? 'Transaksi kasir di MariaDB akan muncul di sini secara otomatis'
+                                          ? (_periodFilter == 'Hari Ini'
+                                              ? 'Belum ada transaksi hari ini di MariaDB'
+                                              : 'Transaksi kasir di MariaDB akan muncul di sini secara otomatis')
                                           : 'Tidak ada transaksi dengan metode $_selectedFilter',
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(fontSize: 12, color: subTextGrey),
@@ -539,66 +609,130 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
     );
   }
 
+  Widget _buildPeriodTab(String label, IconData icon, int count) {
+    final isSelected = (_periodFilter == 'Hari Ini' && label == 'Hari Ini') ||
+        (_periodFilter == 'Semua' && label == 'Semua Riwayat');
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _periodFilter = label == 'Hari Ini' ? 'Hari Ini' : 'Semua';
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryGreen : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? primaryGreen : Colors.grey.shade300,
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isSelected ? 0.15 : 0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : textDark,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$label ($count)',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: isSelected ? Colors.white : textDark,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // --- Pesanan Harian Row ---
   Widget _buildPesananHarianRow() {
     final now = DateTime.now();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     final dateStr = '${now.day} ${months[now.month - 1]} ${now.year}';
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              'Pesanan Harian',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: textDark,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _periodFilter == 'Hari Ini' ? 'Pesanan Hari Ini' : 'Semua Riwayat Pesanan',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Sinkronisasi MariaDB Aktif',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4B5563),
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 2),
-            Text(
-              'Sinkronisasi MariaDB Aktif',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF4B5563),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 14, color: textDark),
+                  const SizedBox(width: 6),
+                  Text(
+                    dateStr,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: textDark,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.calendar_today_outlined, size: 14, color: textDark),
-              const SizedBox(width: 6),
-              Text(
-                dateStr,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: textDark,
-                ),
-              ),
-            ],
-          ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _buildPeriodTab('Hari Ini', Icons.today_rounded, _todayCount),
+            const SizedBox(width: 8),
+            _buildPeriodTab('Semua Riwayat', Icons.history_rounded, _allCount),
+          ],
         ),
       ],
     );
@@ -626,17 +760,17 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.insert_chart_outlined_rounded,
                     size: 19,
                     color: Color(0xFF1D4ED8),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Text(
-                    'Omset Shift Saat Ini',
-                    style: TextStyle(
+                    _periodFilter == 'Hari Ini' ? 'Omset Shift Hari Ini' : 'Total Omset Riwayat',
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: Color(0xFF1D4ED8),
@@ -931,7 +1065,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                           ),
                         ),
                         Text(
-                          trx.time,
+                          trx.isToday || trx.date == null
+                              ? trx.time
+                              : '${trx.date} • ${trx.time}',
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,

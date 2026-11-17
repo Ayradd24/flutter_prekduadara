@@ -128,10 +128,10 @@ class ApiService {
     return [];
   }
 
-  /// Ambil ringkasan omset shift dari database MariaDB
-  static Future<OmsetSummary> ambilOmsetSummary() async {
+  /// Ambil ringkasan omset shift dari database MariaDB (secara default hanya hari ini)
+  static Future<OmsetSummary> ambilOmsetSummary({bool todayOnly = true}) async {
     final list = await ambilRiwayatTransaksi();
-    return OmsetSummary.fromTransactions(list);
+    return OmsetSummary.fromTransactions(list, todayOnly: todayOnly);
   }
 
   /// Cek koneksi ke server backend
@@ -165,7 +165,17 @@ class OmsetSummary {
     this.qrisCount = 0,
   });
 
-  factory OmsetSummary.fromTransactions(List<dynamic> list) {
+  /// Helper untuk mengecek apakah transaksi terjadi pada hari ini
+  static bool isToday(dynamic rawCreated) {
+    if (rawCreated == null) return false;
+    final dt = DateTime.tryParse(rawCreated.toString())?.toLocal();
+    if (dt == null) return false;
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
+
+  /// Hitung omset dari list transaksi. Secara default [todayOnly = true] hanya menghitung transaksi hari ini.
+  factory OmsetSummary.fromTransactions(List<dynamic> list, {bool todayOnly = true}) {
     int total = 0;
     int count = 0;
     int tunai = 0;
@@ -175,6 +185,12 @@ class OmsetSummary {
 
     for (var tx in list) {
       if (tx is Map) {
+        // Jika todayOnly aktif, lewati transaksi yang tanggalnya bukan hari ini
+        if (todayOnly) {
+          final isTxToday = isToday(tx['created_at']);
+          if (!isTxToday) continue;
+        }
+
         final amount = int.tryParse(tx['total']?.toString() ?? '0') ?? 0;
         final rawMethod = (tx['paymentMethod'] ?? '').toString().toUpperCase();
 
