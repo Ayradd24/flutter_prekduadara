@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
+import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
 import 'Login.dart';
 import 'Beranda.dart';
@@ -114,6 +115,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   @override
   void initState() {
     super.initState();
+    SettingsService.getLastKasir().then((k) {
+      if (k != null && mounted) setState(() => _savedKasir = k);
+    });
     _fetchTransactions();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) _fetchTransactions();
@@ -274,11 +278,16 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
     }
   }
 
+  String? _savedKasir;
+
   String get _effectiveKasir {
     if (widget.currentKasir != null &&
         widget.currentKasir!.isNotEmpty &&
         widget.currentKasir != 'Pilih Kasir') {
       return widget.currentKasir!;
+    }
+    if (_savedKasir != null && _savedKasir!.isNotEmpty) {
+      return _savedKasir!;
     }
     final hour = DateTime.now().hour;
     if (hour >= 8 && hour < 12) return 'Rian';
@@ -769,7 +778,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _periodFilter == 'Hari Ini' ? 'Omset Shift Hari Ini' : 'Total Omset Riwayat',
+                    _periodFilter == 'Hari Ini' ? 'Omset Shift Saat Ini' : 'Total Omset Riwayat',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,

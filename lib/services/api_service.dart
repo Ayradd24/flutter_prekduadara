@@ -134,6 +134,142 @@ class ApiService {
     return OmsetSummary.fromTransactions(list, todayOnly: todayOnly);
   }
 
+  /// Ambil daftar staf kasir dari database MariaDB
+  static Future<List<KasirModel>> ambilDaftarKasir() async {
+    final activeBase = await getBaseUrl();
+    final orderedCandidates = [
+      activeBase,
+      ...candidateUrls.where((u) => u != activeBase),
+    ];
+
+    for (final base in orderedCandidates) {
+      try {
+        final url = Uri.parse('$base/cashiers');
+        final response = await http.get(url).timeout(const Duration(seconds: 4));
+
+        if (response.statusCode == 200) {
+          final json = jsonDecode(response.body);
+          if (json['success'] == true && json['data'] is List) {
+            _workingBaseUrl = base;
+            final list = (json['data'] as List)
+                .map((item) => KasirModel.fromJson(item as Map<String, dynamic>))
+                .toList();
+            return list;
+          }
+        }
+      } catch (e) {
+        debugPrint('Gagal ambil daftar kasir dari $base: $e');
+      }
+    }
+
+    return [];
+  }
+
+  /// Perbarui nama kasir di database MariaDB (sinkron dengan web)
+  static Future<Map<String, dynamic>> updateNamaKasir({
+    required String idOrCode,
+    required String newName,
+    String? shift,
+  }) async {
+    final activeBase = await getBaseUrl();
+    final orderedCandidates = [
+      activeBase,
+      ...candidateUrls.where((u) => u != activeBase),
+    ];
+
+    String lastError = 'Koneksi ke backend gagal';
+
+    for (final base in orderedCandidates) {
+      try {
+        final encodedId = Uri.encodeComponent(idOrCode);
+        final url = Uri.parse('$base/cashiers/$encodedId');
+        final Map<String, dynamic> bodyData = {'name': newName.trim()};
+        if (shift != null) bodyData['shift'] = shift;
+        final payload = jsonEncode(bodyData);
+
+        final response = await http
+            .put(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: payload,
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          _workingBaseUrl = base;
+          final json = jsonDecode(response.body);
+          return {
+            'success': true,
+            'message': json['message'] ?? 'Nama kasir berhasil diperbarui',
+            'data': json['data'],
+          };
+        } else {
+          lastError = 'HTTP ${response.statusCode}: ${response.body}';
+        }
+      } catch (e) {
+        lastError = '$e';
+        debugPrint('Gagal update nama kasir via $base: $e');
+      }
+    }
+
+    return {
+      'success': false,
+      'message': 'Gagal memperbarui nama kasir: $lastError',
+    };
+  }
+
+  /// Tambah staf kasir baru ke database MariaDB
+  static Future<Map<String, dynamic>> tambahKasir({
+    required String name,
+    required String shift,
+  }) async {
+    final activeBase = await getBaseUrl();
+    final orderedCandidates = [
+      activeBase,
+      ...candidateUrls.where((u) => u != activeBase),
+    ];
+
+    String lastError = 'Koneksi ke backend gagal';
+
+    for (final base in orderedCandidates) {
+      try {
+        final url = Uri.parse('$base/cashiers');
+        final payload = jsonEncode({
+          'name': name.trim(),
+          'shift': shift,
+        });
+
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: payload,
+            )
+            .timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          _workingBaseUrl = base;
+          final json = jsonDecode(response.body);
+          return {
+            'success': true,
+            'message': json['message'] ?? 'Kasir baru berhasil didaftarkan',
+            'data': json['data'],
+          };
+        } else {
+          lastError = 'HTTP ${response.statusCode}: ${response.body}';
+        }
+      } catch (e) {
+        lastError = '$e';
+        debugPrint('Gagal tambah kasir via $base: $e');
+      }
+    }
+
+    return {
+      'success': false,
+      'message': 'Gagal menambahkan kasir: $lastError',
+    };
+  }
+
   /// Cek koneksi ke server backend
   static Future<bool> cekKoneksi() async {
     final activeBase = await getBaseUrl();
@@ -215,5 +351,63 @@ class OmsetSummary {
       qrisOmset: qris,
       qrisCount: qrisC,
     );
+  }
+}
+
+/// Model kasir sinkron dengan tabel MariaDB `kasir` & Web Dashboard
+class KasirModel {
+  final String id; // e.g. '#KSR-001'
+  final int? dbId;
+  final String name;
+  final String roleTitle;
+  final String shift;
+  final String statusLive;
+  final bool isActive;
+
+  KasirModel({
+    required this.id,
+    this.dbId,
+    required this.name,
+    this.roleTitle = 'Kasir',
+    required this.shift,
+    this.statusLive = 'Standby / Rehat',
+    this.isActive = true,
+  });
+
+  factory KasirModel.fromJson(Map<String, dynamic> json) {
+    return KasirModel(
+      id: json['id']?.toString() ?? '',
+      dbId: json['dbId'] is int
+          ? json['dbId']
+          : int.tryParse(json['dbId']?.toString() ?? ''),
+      name: json['name']?.toString() ?? 'Kasir',
+      roleTitle: json['roleTitle']?.toString() ?? 'Kasir',
+      shift: json['shift']?.toString() ?? 'Shift Pagi (08:00 - 12:00)',
+      statusLive: json['statusLive']?.toString() ?? 'Standby / Rehat',
+      isActive: json['isActive'] == true || json['isActive'] == 1,
+    );
+  }
+
+  /// Nama bersih tanpa tanda kurung
+  String get shortName => name.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+
+  /// Nama shift ringkas (Shift Pagi / Shift Siang / Shift Malam)
+  String get shiftName {
+    final s = shift.toLowerCase();
+    if (s.contains('siang')) return 'Shift Siang';
+    if (s.contains('malam')) return 'Shift Malam';
+    return 'Shift Pagi';
+  }
+
+  /// Jam operasional shift
+  String get shiftHours {
+    final match = RegExp(r'(\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2})').firstMatch(shift);
+    if (match != null) {
+      return '${match.group(1)} WIB';
+    }
+    final s = shift.toLowerCase();
+    if (s.contains('siang')) return '12:00 – 17:00 WIB';
+    if (s.contains('malam')) return '17:00 – 22:00 WIB';
+    return '08:00 – 12:00 WIB';
   }
 }

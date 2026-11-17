@@ -189,12 +189,12 @@ class _TransaksiPageState extends State<TransaksiPage> {
                   border: Border.all(color: const Color(0xFFA7F3D0)),
                 ),
                 child: Text(
-                  '✓ Tersimpan di MariaDB (${apiResult['data']?['id'] ?? 'TRX'})',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF047857),
-                  ),
+                  // '✓ Tersimpan di MariaDB (${apiResult['data']?['id'] ?? 'TRX'})',
+                  // style: const TextStyle(
+                  //   fontSize: 11,
+                  //   fontWeight: FontWeight.bold,
+                  //   color: Color(0xFF047857),
+                  // ),
                 ),
               ),
             ] else ...[
