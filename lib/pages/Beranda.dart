@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../services/api_service.dart';
+import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
 import 'Transaksi.dart';
 import 'LogTransaksi.dart';
@@ -32,6 +33,9 @@ class BerandaPage extends StatefulWidget {
 class _BerandaPageState extends State<BerandaPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  String? _currentKasir;
+  String? _currentShift;
+
   int _totalOmset = 0;
   int _totalCount = 0;
   int _tunaiOmset = 0;
@@ -42,6 +46,9 @@ class _BerandaPageState extends State<BerandaPage> {
   Timer? _omsetTimer;
 
   String get _effectiveKasir {
+    if (_currentKasir != null && _currentKasir!.isNotEmpty && _currentKasir != 'Pilih Kasir') {
+      return _currentKasir!;
+    }
     if (widget.currentKasir != null && widget.currentKasir!.isNotEmpty && widget.currentKasir != 'Pilih Kasir') {
       return widget.currentKasir!;
     }
@@ -52,6 +59,9 @@ class _BerandaPageState extends State<BerandaPage> {
   }
 
   String get _effectiveShift {
+    if (_currentShift != null && _currentShift!.isNotEmpty && _currentShift != '-') {
+      return _currentShift!;
+    }
     if (widget.currentShift != null && widget.currentShift!.isNotEmpty && widget.currentShift != '-') {
       return widget.currentShift!;
     }
@@ -70,11 +80,50 @@ class _BerandaPageState extends State<BerandaPage> {
   @override
   void initState() {
     super.initState();
+    _currentKasir = widget.currentKasir;
+    _currentShift = widget.currentShift;
+    if (_currentKasir == null) {
+      SettingsService.getLastKasir().then((saved) {
+        if (saved != null && saved.isNotEmpty && mounted) {
+          setState(() {
+            _currentKasir = saved;
+          });
+          _fetchOmsetData();
+        }
+      });
+    }
     _loadProductsFromDatabase();
+    _loadCashiers();
     _fetchOmsetData();
     _omsetTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) _fetchOmsetData();
     });
+  }
+
+  /// Sinkronisasi daftar staf kasir langsung dari backend MariaDB
+  Future<void> _loadCashiers() async {
+    try {
+      final list = await ApiService.ambilDaftarKasir();
+      if (list.isNotEmpty && mounted) {
+        // Sinkronkan nama kasir aktif jika ada perubahan dari web/database
+        final current = _effectiveKasir.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+        final matched = list.firstWhere(
+          (c) =>
+              c.shortName.toLowerCase() == current.toLowerCase() ||
+              c.name.toLowerCase() == current.toLowerCase(),
+          orElse: () => list.first,
+        );
+
+        if (matched.name != current && matched.shortName != current) {
+          setState(() {
+            _currentKasir = matched.name;
+          });
+          await SettingsService.setLastKasir(matched.name);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading cashiers in Beranda: $e');
+    }
   }
 
   @override
@@ -85,7 +134,10 @@ class _BerandaPageState extends State<BerandaPage> {
 
   Future<void> _fetchOmsetData() async {
     try {
-      final summary = await ApiService.ambilOmsetSummary();
+      final summary = await ApiService.ambilOmsetSummary(
+        shift: _effectiveShift,
+        cashier: _effectiveKasir,
+      );
       if (mounted) {
         setState(() {
           _totalOmset = summary.totalOmset;
@@ -876,6 +928,8 @@ class _BerandaPageState extends State<BerandaPage> {
             MaterialPageRoute(
               builder: (context) => TransaksiPage(
                 initialItemCounts: _itemCounts,
+                currentKasir: _effectiveKasir,
+                currentShift: _effectiveShift,
               ),
             ),
           );

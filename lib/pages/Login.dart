@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/settings_service.dart';
 import 'Beranda.dart';
@@ -20,11 +21,15 @@ class _LoginPageState extends State<LoginPage> {
   late String _currentKasir;
   late String _currentShift;
   late String _currentShiftTime;
+  String? _currentKasirId;
+
+  List<KasirModel> _cashiers = [];
 
   @override
   void initState() {
     super.initState();
     _initShiftByCurrentTime();
+    _loadCashiersFromBackend();
   }
 
   void _initShiftByCurrentTime() {
@@ -32,26 +37,74 @@ class _LoginPageState extends State<LoginPage> {
     final hour = now.hour;
 
     if (hour >= 8 && hour < 12) {
+      _currentKasirId = '#KSR-001';
       _currentKasir = 'Rian';
       _currentShift = 'Shift Pagi';
       _currentShiftTime = '08:00 – 12:00 WIB';
     } else if (hour >= 12 && hour < 17) {
+      _currentKasirId = '#KSR-002';
       _currentKasir = 'Siti';
       _currentShift = 'Shift Siang';
       _currentShiftTime = '12:00 – 17:00 WIB';
-    } else if (hour >= 17 && hour < 22) {
-      _currentKasir = 'Budi';
-      _currentShift = 'Shift Malam';
-      _currentShiftTime = '17:00 – 22:00 WIB';
-    } else if (hour < 8) {
-      _currentKasir = 'Rian';
-      _currentShift = 'Shift Pagi';
-      _currentShiftTime = '08:00 – 12:00 WIB';
     } else {
+      _currentKasirId = '#KSR-003';
       _currentKasir = 'Budi';
       _currentShift = 'Shift Malam';
       _currentShiftTime = '17:00 – 22:00 WIB';
     }
+  }
+
+  /// Sinkronisasi daftar staf kasir langsung dari backend MariaDB
+  Future<void> _loadCashiersFromBackend() async {
+    try {
+      final list = await ApiService.ambilDaftarKasir();
+      if (list.isNotEmpty && mounted) {
+        setState(() {
+          _cashiers = list;
+        });
+
+        // Cek kasir yang terakhir bertugas di sesi sebelumnya
+        final savedKasirName = await SettingsService.getLastKasir();
+        KasirModel matched;
+        if (savedKasirName != null && savedKasirName.isNotEmpty) {
+          matched = list.firstWhere(
+            (c) =>
+                c.shortName.toLowerCase() == savedKasirName.toLowerCase() ||
+                c.name.toLowerCase() == savedKasirName.toLowerCase(),
+            orElse: () => _findBestKasirByHour(list),
+          );
+        } else {
+          matched = _findBestKasirByHour(list);
+        }
+
+        if (mounted) {
+          _selectKasir(matched);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error load cashiers in Login: $e');
+    }
+  }
+
+  KasirModel _findBestKasirByHour(List<KasirModel> list) {
+    final hour = DateTime.now().hour;
+    String target = 'pagi';
+    if (hour >= 12 && hour < 17) target = 'siang';
+    if (hour >= 17 || hour < 8) target = 'malam';
+
+    return list.firstWhere(
+      (c) => c.shift.toLowerCase().contains(target),
+      orElse: () => list.first,
+    );
+  }
+
+  void _selectKasir(KasirModel k) {
+    setState(() {
+      _currentKasirId = k.id;
+      _currentKasir = k.shortName;
+      _currentShift = k.shiftName;
+      _currentShiftTime = k.shiftHours;
+    });
   }
 
   String _getFormattedDate() {
@@ -92,14 +145,17 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _showGantiKasirDialog() {
-    final kasirList = [
-      {'nama': 'Rian', 'shift': 'Shift Pagi', 'waktu': '08:00 – 12:00 WIB'},
-      {'nama': 'Siti', 'shift': 'Shift Siang', 'waktu': '12:00 – 17:00 WIB'},
-      {'nama': 'Budi', 'shift': 'Shift Malam', 'waktu': '17:00 – 22:00 WIB'},
-    ];
+    final List<KasirModel> displayList = _cashiers.isNotEmpty
+        ? _cashiers
+        : [
+            KasirModel(id: '#KSR-001', name: 'Rian', shift: 'Shift Pagi (08:00 - 12:00)'),
+            KasirModel(id: '#KSR-002', name: 'Siti', shift: 'Shift Siang (12:00 - 17:00)'),
+            KasirModel(id: '#KSR-003', name: 'Budi', shift: 'Shift Malam (17:00 - 22:00)'),
+          ];
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -107,71 +163,119 @@ class _LoginPageState extends State<LoginPage> {
       builder: (ctx) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Pilih Kasir Bertugas',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: textDark,
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Pilih Kasir Bertugas',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: textDark,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Tersinkronisasi dengan Database MariaDB',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: subTextGrey),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, color: darkGreen),
+                        tooltip: 'Muat ulang dari server',
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await _loadCashiersFromBackend();
+                          _showGantiKasirDialog();
+                        },
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 14),
-                ...kasirList.map((k) {
-                  final isSelected = _currentKasir == k['nama'];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: isSelected ? const Color(0xFFEBF7EE) : const Color(0xFFF9FAFB),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isSelected ? darkGreen : const Color(0xFFE5E7EB),
-                        width: isSelected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
+                  const SizedBox(height: 14),
+                  ...displayList.map((k) {
+                    final isSelected = (_currentKasirId != null && _currentKasirId == k.id) ||
+                        _currentKasir.toLowerCase() == k.shortName.toLowerCase();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFFEBF7EE) : const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
                           color: isSelected ? darkGreen : const Color(0xFFE5E7EB),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.person_rounded,
-                          color: isSelected ? Colors.white : const Color(0xFF4B5563),
-                          size: 20,
+                          width: isSelected ? 1.5 : 1,
                         ),
                       ),
-                      title: Text(
-                        k['nama']!,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: isSelected ? darkGreen : textDark,
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? darkGreen : const Color(0xFFE5E7EB),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.person_rounded,
+                            color: isSelected ? Colors.white : const Color(0xFF4B5563),
+                            size: 20,
+                          ),
                         ),
+                        title: Row(
+                          children: [
+                            Text(
+                              k.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: isSelected ? darkGreen : textDark,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE5E7EB),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                k.id,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF374151),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          '${k.shiftName} • ${k.shiftHours}',
+                          style: const TextStyle(fontSize: 12, color: subTextGrey),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: darkGreen, size: 22)
+                            : null,
+                        onTap: () {
+                          _selectKasir(k);
+                          Navigator.pop(ctx);
+                        },
                       ),
-                      subtitle: Text(
-                        '${k['shift']} • ${k['waktu']}',
-                        style: const TextStyle(fontSize: 12, color: subTextGrey),
-                      ),
-                      trailing: isSelected
-                          ? const Icon(Icons.check_circle_rounded, color: darkGreen)
-                          : null,
-                      onTap: () {
-                        setState(() {
-                          _currentKasir = k['nama']!;
-                          _currentShift = k['shift']!;
-                          _currentShiftTime = k['waktu']!;
-                        });
-                        Navigator.pop(ctx);
-                      },
-                    ),
-                  );
-                }),
-              ],
+                    );
+                  }),
+                ],
+              ),
             ),
           ),
         );
@@ -412,6 +516,25 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                 ],
                               ),
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.touch_app_outlined, size: 13, color: subTextGrey),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    'Ketuk untuk memilih kasir bertugas',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: subTextGrey),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
