@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
+import '../services/api_service.dart';
 import '../widget/app_drawer.dart';
 import 'Transaksi.dart';
 import 'LogTransaksi.dart';
@@ -29,6 +30,14 @@ class BerandaPage extends StatefulWidget {
 
 class _BerandaPageState extends State<BerandaPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  int _totalOmset = 0;
+  int _totalCount = 0;
+  int _tunaiOmset = 0;
+  int _tunaiCount = 0;
+  int _qrisOmset = 0;
+  int _qrisCount = 0;
+  bool _isLoadingOmset = true;
 
   String get _effectiveKasir {
     if (widget.currentKasir != null && widget.currentKasir!.isNotEmpty && widget.currentKasir != 'Pilih Kasir') {
@@ -60,6 +69,38 @@ class _BerandaPageState extends State<BerandaPage> {
   void initState() {
     super.initState();
     _loadProductsFromDatabase();
+    _fetchOmsetData();
+  }
+
+  Future<void> _fetchOmsetData() async {
+    try {
+      final summary = await ApiService.ambilOmsetSummary();
+      if (mounted) {
+        setState(() {
+          _totalOmset = summary.totalOmset;
+          _totalCount = summary.totalCount;
+          _tunaiOmset = summary.tunaiOmset;
+          _tunaiCount = summary.tunaiCount;
+          _qrisOmset = summary.qrisOmset;
+          _qrisCount = summary.qrisCount;
+          _isLoadingOmset = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching omset in Beranda: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingOmset = false;
+        });
+      }
+    }
+  }
+
+  String _formatCurrency(int amount) {
+    return 'Rp ${amount.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]}.',
+        )}';
   }
 
   Future<void> _loadProductsFromDatabase() async {
@@ -143,12 +184,21 @@ class _BerandaPageState extends State<BerandaPage> {
                 Expanded(
                   child: SafeArea(
                     top: false,
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                    child: RefreshIndicator(
+                      onRefresh: () async {
+                        await _fetchOmsetData();
+                        await _loadProductsFromDatabase();
+                      },
+                      color: primaryGreen,
+                      backgroundColor: Colors.white,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                           // Cashier Status Card
                           _buildCashierStatusCard(),
                           const SizedBox(height: 12),
@@ -189,6 +239,7 @@ class _BerandaPageState extends State<BerandaPage> {
                     ),
                   ),
                 ),
+              ),
               ],
             ),
           ],
@@ -364,9 +415,9 @@ class _BerandaPageState extends State<BerandaPage> {
           const SizedBox(height: 10),
 
           // Main Amount
-          const Text(
-            'Rp 1.450.000',
-            style: TextStyle(
+          Text(
+            _isLoadingOmset ? 'Memuat...' : _formatCurrency(_totalOmset),
+            style: const TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.w900,
               color: textDark,
@@ -376,17 +427,17 @@ class _BerandaPageState extends State<BerandaPage> {
           const SizedBox(height: 4),
 
           // Completed Transactions Count
-          const Row(
+          Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline_rounded,
                 size: 15,
                 color: Color(0xFF4B5563),
               ),
-              SizedBox(width: 5),
+              const SizedBox(width: 5),
               Text(
-                '32 Transaksi Selesai',
-                style: TextStyle(
+                '$_totalCount Transaksi Selesai',
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF4B5563),
@@ -404,16 +455,19 @@ class _BerandaPageState extends State<BerandaPage> {
               child: Row(
                 children: [
                   // Tunai Segment (Green)
-                  Expanded(
-                    flex: 95,
-                    child: Container(color: primaryGreen),
-                  ),
-                  const SizedBox(width: 2),
+                  if (_tunaiOmset > 0 || _totalOmset == 0)
+                    Expanded(
+                      flex: _tunaiOmset > 0 ? _tunaiOmset : 1,
+                      child: Container(color: primaryGreen),
+                    ),
+                  if (_tunaiOmset > 0 && _qrisOmset > 0)
+                    const SizedBox(width: 2),
                   // QRIS Segment (Blue)
-                  Expanded(
-                    flex: 50,
-                    child: Container(color: qrisBlue),
-                  ),
+                  if (_qrisOmset > 0 || (_totalOmset == 0 && _tunaiOmset == 0))
+                    Expanded(
+                      flex: _qrisOmset > 0 ? _qrisOmset : 1,
+                      child: Container(color: qrisBlue),
+                    ),
                 ],
               ),
             ),
@@ -421,32 +475,32 @@ class _BerandaPageState extends State<BerandaPage> {
           const SizedBox(height: 10),
 
           // Legend
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
+                  const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: Icon(Icons.circle, size: 7, color: primaryGreen),
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tunai: Rp 950.000',
-                        style: TextStyle(
+                        'Tunai: ${_formatCurrency(_tunaiOmset)}',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: primaryGreen,
                         ),
                       ),
-                      SizedBox(height: 1),
+                      const SizedBox(height: 1),
                       Text(
-                        '21 Transaksi',
-                        style: TextStyle(
+                        '$_tunaiCount Transaksi',
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: subTextGrey,
@@ -459,26 +513,26 @@ class _BerandaPageState extends State<BerandaPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
+                  const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: Icon(Icons.circle, size: 7, color: qrisBlue),
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'QRIS: Rp 500.000',
-                        style: TextStyle(
+                        'QRIS: ${_formatCurrency(_qrisOmset)}',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: qrisBlue,
                         ),
                       ),
-                      SizedBox(height: 1),
+                      const SizedBox(height: 1),
                       Text(
-                        '11 Transaksi',
-                        style: TextStyle(
+                        '$_qrisCount Transaksi',
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: subTextGrey,
@@ -522,8 +576,8 @@ class _BerandaPageState extends State<BerandaPage> {
               ],
             ),
             InkWell(
-              onTap: () {
-                Navigator.push(
+              onTap: () async {
+                await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => LogTransaksiPage(
@@ -532,6 +586,7 @@ class _BerandaPageState extends State<BerandaPage> {
                     ),
                   ),
                 );
+                if (mounted) _fetchOmsetData();
               },
               borderRadius: BorderRadius.circular(8),
               child: Container(
@@ -814,10 +869,13 @@ class _BerandaPageState extends State<BerandaPage> {
             ),
           );
 
-          if (result == true && mounted) {
-            setState(() {
-              _itemCounts.updateAll((key, value) => 0);
-            });
+          if (mounted) {
+            _fetchOmsetData();
+            if (result == true) {
+              setState(() {
+                _itemCounts.updateAll((key, value) => 0);
+              });
+            }
           }
         },
         style: ElevatedButton.styleFrom(

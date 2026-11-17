@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/api_service.dart';
 import '../widget/app_drawer.dart';
 import 'Login.dart';
 import 'Beranda.dart';
@@ -75,6 +77,126 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
 
   final Set<String> _expandedTrxIds = {};
 
+  List<TransactionItem> _transactions = [];
+  bool _isLoading = true;
+  int _totalOmset = 0;
+  int _totalCount = 0;
+  int _tunaiOmset = 0;
+  int _tunaiCount = 0;
+  int _qrisOmset = 0;
+  int _qrisCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTransactions();
+  }
+
+  Future<void> _fetchTransactions() async {
+    setState(() => _isLoading = true);
+    try {
+      final list = await ApiService.ambilRiwayatTransaksi();
+      int total = 0;
+      int count = 0;
+      int tunai = 0;
+      int tunaiC = 0;
+      int qris = 0;
+      int qrisC = 0;
+
+      List<TransactionItem> parsedList = [];
+      for (var tx in list) {
+        if (tx is Map) {
+          final amount = int.tryParse(tx['total']?.toString() ?? '0') ?? 0;
+          final rawMethod = (tx['paymentMethod'] ?? 'TUNAI').toString().toUpperCase();
+          final method = rawMethod.contains('QRIS') ? 'QRIS' : 'TUNAI';
+
+          total += amount;
+          count++;
+          if (method == 'TUNAI') {
+            tunai += amount;
+            tunaiC++;
+          } else {
+            qris += amount;
+            qrisC++;
+          }
+
+          // Parse details
+          List<TransactionItemDetail> details = [];
+          final rawItems = tx['items'];
+          if (rawItems is List) {
+            for (var it in rawItems) {
+              if (it is Map) {
+                details.add(TransactionItemDetail(
+                  name: it['name']?.toString() ?? 'Menu',
+                  quantity: int.tryParse(it['quantity']?.toString() ?? '1') ?? 1,
+                  price: int.tryParse(it['price']?.toString() ?? '0') ?? 0,
+                ));
+              }
+            }
+          } else if (rawItems is String) {
+            try {
+              final decoded = jsonDecode(rawItems);
+              if (decoded is List) {
+                for (var it in decoded) {
+                  if (it is Map) {
+                    details.add(TransactionItemDetail(
+                      name: it['name']?.toString() ?? 'Menu',
+                      quantity: int.tryParse(it['quantity']?.toString() ?? '1') ?? 1,
+                      price: int.tryParse(it['price']?.toString() ?? '0') ?? 0,
+                    ));
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (details.isEmpty) {
+            details.add(TransactionItemDetail(
+              name: tx['itemsSummary']?.toString() ?? 'Ayam Geprek + Es Teh',
+              quantity: int.tryParse(tx['totalItems']?.toString() ?? '1') ?? 1,
+              price: amount,
+            ));
+          }
+
+          final rawId = tx['id']?.toString() ?? 'TRX-???';
+          final id = rawId.startsWith('#') ? rawId : '#$rawId';
+          final cashierName = tx['cashier']?.toString() ?? _namaKasir;
+
+          parsedList.add(TransactionItem(
+            id: id,
+            time: tx['time']?.toString() ?? '12:00',
+            status: 'LUNAS',
+            items: tx['itemsSummary']?.toString() ?? 'Pesanan PrekDuaDara',
+            paymentMethod: method,
+            cashier: 'Kasir: $cashierName',
+            totalAmount: amount,
+            subtotal: amount,
+            tax: 0,
+            cashReceived: amount,
+            change: 0,
+            details: details,
+          ));
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _transactions = parsedList;
+          _totalOmset = total;
+          _totalCount = count;
+          _tunaiOmset = tunai;
+          _tunaiCount = tunaiC;
+          _qrisOmset = qris;
+          _qrisCount = qrisC;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetch transactions in LogTransaksi: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   String get _effectiveKasir {
     if (widget.currentKasir != null &&
         widget.currentKasir!.isNotEmpty &&
@@ -101,114 +223,6 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
 
   String get _namaKasir =>
       _effectiveKasir.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
-
-  List<TransactionItem> get _allTransactions => [
-    TransactionItem(
-      id: '#TRX-1029',
-      time: '14:25',
-      status: 'LUNAS',
-      items: '2× Ayam Geprek Bakar + Es Teh',
-      paymentMethod: 'QRIS',
-      cashier: 'Kasir: $_namaKasir',
-      subtotal: 36000,
-      tax: 3600,
-      totalAmount: 39600,
-      cashReceived: 39600,
-      change: 0,
-      details: [
-        TransactionItemDetail(
-          name: 'Paket Geprek Bakar (Lv 2)',
-          quantity: 2,
-          price: 36000,
-        ),
-      ],
-    ),
-    TransactionItem(
-      id: '#TRX-1028',
-      time: '14:10',
-      status: 'LUNAS',
-      items: '1× Ayam Geprek Biasa + Es Teh',
-      paymentMethod: 'TUNAI',
-      cashier: 'Kasir: $_namaKasir',
-      subtotal: 17000,
-      tax: 1700,
-      totalAmount: 18700,
-      cashReceived: 20000,
-      change: 1300,
-      details: [
-        TransactionItemDetail(
-          name: 'Paket Geprek Biasa (Lv 3)',
-          quantity: 1,
-          price: 17000,
-        ),
-      ],
-    ),
-    TransactionItem(
-      id: '#TRX-1027',
-      time: '13:45',
-      status: 'LUNAS',
-      items: '3× Ayam Geprek Bakar + Es Teh',
-      paymentMethod: 'QRIS',
-      cashier: 'Kasir: $_namaKasir',
-      subtotal: 54000,
-      tax: 5400,
-      totalAmount: 59400,
-      cashReceived: 59400,
-      change: 0,
-      details: [
-        TransactionItemDetail(
-          name: 'Paket Geprek Bakar (Lv 5)',
-          quantity: 3,
-          price: 54000,
-        ),
-      ],
-    ),
-    TransactionItem(
-      id: '#TRX-1026',
-      time: '13:15',
-      status: 'LUNAS',
-      items: '2× Ayam Geprek Biasa + Es Teh',
-      paymentMethod: 'TUNAI',
-      cashier: 'Kasir: $_namaKasir',
-      subtotal: 34000,
-      tax: 3400,
-      totalAmount: 37400,
-      cashReceived: 50000,
-      change: 12600,
-      details: [
-        TransactionItemDetail(
-          name: 'Paket Geprek Biasa (Lv 1)',
-          quantity: 2,
-          price: 34000,
-        ),
-      ],
-    ),
-    TransactionItem(
-      id: '#TRX-1025',
-      time: '12:50',
-      status: 'LUNAS',
-      items: '1× Ayam Geprek Bakar + Es Teh, 1× Ayam Geprek Biasa + Es Teh',
-      paymentMethod: 'QRIS',
-      cashier: 'Kasir: $_namaKasir',
-      subtotal: 35000,
-      tax: 3500,
-      totalAmount: 38500,
-      cashReceived: 38500,
-      change: 0,
-      details: [
-        TransactionItemDetail(
-          name: 'Paket Geprek Bakar',
-          quantity: 1,
-          price: 18000,
-        ),
-        TransactionItemDetail(
-          name: 'Paket Geprek Biasa',
-          quantity: 1,
-          price: 17000,
-        ),
-      ],
-    ),
-  ];
 
   String _formatCurrency(int amount) {
     return 'Rp ${amount.toString().replaceAllMapped(
@@ -292,8 +306,8 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   @override
   Widget build(BuildContext context) {
     final filteredList = _selectedFilter == 'Semua'
-        ? _allTransactions
-        : _allTransactions
+        ? _transactions
+        : _transactions
             .where((t) => t.paymentMethod.toUpperCase() == _selectedFilter.toUpperCase())
             .toList();
 
@@ -329,38 +343,84 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                 Expanded(
                   child: SafeArea(
                     top: false,
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Tombol Kembali ke Beranda
-                          _buildSubHeaderRow(),
-                          const SizedBox(height: 12),
+                    child: RefreshIndicator(
+                      onRefresh: _fetchTransactions,
+                      color: primaryGreen,
+                      backgroundColor: Colors.white,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Tombol Kembali ke Beranda
+                            _buildSubHeaderRow(),
+                            const SizedBox(height: 12),
 
-                          // Pesanan Harian Title & Date
-                          _buildPesananHarianRow(),
-                          const SizedBox(height: 12),
+                            // Pesanan Harian Title & Date
+                            _buildPesananHarianRow(),
+                            const SizedBox(height: 12),
 
-                          // Total Omset Hari Ini Card
-                          _buildOmsetCard(),
-                          const SizedBox(height: 16),
+                            // Total Omset Hari Ini Card
+                            _buildOmsetCard(),
+                            const SizedBox(height: 16),
 
-                          // Filter Chips (Semua, Tunai, QRIS)
-                          _buildFilterChips(),
-                          const SizedBox(height: 14),
+                            // Filter Chips (Semua, Tunai, QRIS)
+                            _buildFilterChips(),
+                            const SizedBox(height: 14),
 
-                          // Transactions List
-                          ...filteredList.map((trx) => Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _buildTransactionCard(trx),
-                              )),
+                            // Transactions List / Loading / Empty
+                            if (_isLoading)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 40),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    color: primaryGreen,
+                                  ),
+                                ),
+                              )
+                            else if (filteredList.isEmpty)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
+                                    const SizedBox(height: 10),
+                                    const Text(
+                                      'Belum ada transaksi',
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textDark),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _selectedFilter == 'Semua'
+                                          ? 'Transaksi kasir di MariaDB akan muncul di sini secara otomatis'
+                                          : 'Tidak ada transaksi dengan metode $_selectedFilter',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(fontSize: 12, color: subTextGrey),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              ...filteredList.map((trx) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _buildTransactionCard(trx),
+                                  )),
 
-                          // Validasi Akhir Shift Section
-                          _buildValidasiShiftSection(),
-                          const SizedBox(height: 12),
-                        ],
+                            const SizedBox(height: 12),
+
+                            // Validasi Akhir Shift Section
+                            _buildValidasiShiftSection(),
+                            const SizedBox(height: 12),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -468,6 +528,10 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
 
   // --- Pesanan Harian Row ---
   Widget _buildPesananHarianRow() {
+    final now = DateTime.now();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    final dateStr = '${now.day} ${months[now.month - 1]} ${now.year}';
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -485,7 +549,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             ),
             SizedBox(height: 2),
             Text(
-              'Sinkronisasi Lokal Aktif',
+              'Sinkronisasi MariaDB Aktif',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -507,14 +571,14 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
               ),
             ],
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.calendar_today_outlined, size: 14, color: textDark),
-              SizedBox(width: 6),
+              const Icon(Icons.calendar_today_outlined, size: 14, color: textDark),
+              const SizedBox(width: 6),
               Text(
-                '11 Okt 2026',
-                style: TextStyle(
+                dateStr,
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   color: textDark,
@@ -588,9 +652,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
           const SizedBox(height: 10),
 
           // Total Amount
-          const Text(
-            'Rp 1.450.000',
-            style: TextStyle(
+          Text(
+            _isLoading ? 'Memuat...' : _formatCurrency(_totalOmset),
+            style: const TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.w900,
               color: textDark,
@@ -600,17 +664,17 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
           const SizedBox(height: 4),
 
           // Status Row
-          const Row(
+          Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline_rounded,
                 size: 15,
                 color: Color(0xFF4B5563),
               ),
-              SizedBox(width: 5),
+              const SizedBox(width: 5),
               Text(
-                '32 Transaksi Selesai',
-                style: TextStyle(
+                '$_totalCount Transaksi Selesai',
+                style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF4B5563),
@@ -627,15 +691,18 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
               height: 8,
               child: Row(
                 children: [
-                  Expanded(
-                    flex: 95,
-                    child: Container(color: primaryGreen),
-                  ),
-                  const SizedBox(width: 2),
-                  Expanded(
-                    flex: 50,
-                    child: Container(color: qrisBlue),
-                  ),
+                  if (_tunaiOmset > 0 || _totalOmset == 0)
+                    Expanded(
+                      flex: _tunaiOmset > 0 ? _tunaiOmset : 1,
+                      child: Container(color: primaryGreen),
+                    ),
+                  if (_tunaiOmset > 0 && _qrisOmset > 0)
+                    const SizedBox(width: 2),
+                  if (_qrisOmset > 0 || (_totalOmset == 0 && _tunaiOmset == 0))
+                    Expanded(
+                      flex: _qrisOmset > 0 ? _qrisOmset : 1,
+                      child: Container(color: qrisBlue),
+                    ),
                 ],
               ),
             ),
@@ -643,32 +710,32 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
           const SizedBox(height: 10),
 
           // Legend
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
+                  const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: Icon(Icons.circle, size: 7, color: primaryGreen),
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tunai: Rp 950.000',
-                        style: TextStyle(
+                        'Tunai: ${_formatCurrency(_tunaiOmset)}',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: primaryGreen,
                         ),
                       ),
-                      SizedBox(height: 1),
+                      const SizedBox(height: 1),
                       Text(
-                        '21 Transaksi',
-                        style: TextStyle(
+                        '$_tunaiCount Transaksi',
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: subTextGrey,
@@ -681,26 +748,26 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
+                  const Padding(
                     padding: EdgeInsets.only(top: 4),
                     child: Icon(Icons.circle, size: 7, color: qrisBlue),
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'QRIS: Rp 500.000',
-                        style: TextStyle(
+                        'QRIS: ${_formatCurrency(_qrisOmset)}',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: qrisBlue,
                         ),
                       ),
-                      SizedBox(height: 1),
+                      const SizedBox(height: 1),
                       Text(
-                        '11 Transaksi',
-                        style: TextStyle(
+                        '$_qrisCount Transaksi',
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: subTextGrey,
@@ -720,9 +787,9 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   // --- Filter Chips ---
   Widget _buildFilterChips() {
     final chips = [
-      {'label': 'Semua (32)', 'key': 'Semua'},
-      {'label': 'Tunai (21)', 'key': 'Tunai'},
-      {'label': 'QRIS (11)', 'key': 'QRIS'},
+      {'label': 'Semua ($_totalCount)', 'key': 'Semua'},
+      {'label': 'Tunai ($_tunaiCount)', 'key': 'Tunai'},
+      {'label': 'QRIS ($_qrisCount)', 'key': 'QRIS'},
     ];
 
     return Row(
