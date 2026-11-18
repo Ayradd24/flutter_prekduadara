@@ -544,7 +544,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                                       _selectedFilter == 'Semua'
                                           ? (_periodFilter == 'Saat Ini'
                                               ? 'Belum ada transaksi pada shift ini ($_effectiveShift)'
-                                              : 'Belum ada transaksi hari ini di MariaDB')
+                                              : 'Belum ada transaksi hari ini')
                                           : 'Tidak ada transaksi dengan metode $_selectedFilter',
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(fontSize: 12, color: subTextGrey),
@@ -744,15 +744,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                     color: textDark,
                   ),
                 ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Sinkronisasi MariaDB Aktif',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF4B5563),
-                  ),
-                ),
+
               ],
             ),
             Container(

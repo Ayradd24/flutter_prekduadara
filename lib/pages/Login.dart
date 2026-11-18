@@ -191,7 +191,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Tersinkronisasi dengan Database MariaDB',
+                            'Tersinkronisasi dengan sistem',
                             style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: subTextGrey),
                           ),
                         ],
