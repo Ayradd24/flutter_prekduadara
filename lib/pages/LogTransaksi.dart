@@ -388,24 +388,26 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
               // Sinkronkan status kasir menjadi Standby di backend MariaDB
-              ApiService.logoutKasir(_effectiveKasir);
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const LoginPage(),
-                ),
-                (route) => false,
-              );
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Shift berhasil ditutup!'),
-                  duration: Duration(seconds: 1),
-                  backgroundColor: primaryGreen,
-                ),
-              );
+              await ApiService.logoutKasir(_effectiveKasir);
+              if (mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LoginPage(),
+                  ),
+                  (route) => false,
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Shift berhasil ditutup!'),
+                    duration: Duration(seconds: 1),
+                    backgroundColor: primaryGreen,
+                  ),
+                );
+              }
             },
             child: const Text('Tutup Shift', style: TextStyle(color: Colors.white)),
           ),
