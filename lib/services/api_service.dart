@@ -343,6 +343,91 @@ class ApiService {
     }
   }
 
+  /// Tandai kasir sedang aktif melayani (login shift) di backend MariaDB
+  static Future<bool> loginKasir(String cashierNameOrId) async {
+    for (int attempt = 0; attempt < 2; attempt++) {
+      final activeBase = await getBaseUrl();
+      try {
+        final url = Uri.parse('$activeBase/cashiers/login');
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'cashier': cashierNameOrId}),
+            )
+            .timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          debugPrint('✅ Kasir $cashierNameOrId berhasil login aktif di backend MariaDB ($activeBase)');
+          return true;
+        }
+        debugPrint('⚠️ loginKasir HTTP ${response.statusCode}: ${response.body}');
+      } catch (e) {
+        debugPrint('⚠️ Gagal login kasir (attempt ${attempt + 1}) via $activeBase: $e');
+      }
+      _workingBaseUrl = null;
+    }
+    return false;
+  }
+
+  /// Tandai kasir selesai shift / standby di backend MariaDB
+  static Future<bool> logoutKasir([String? cashierNameOrId]) async {
+    for (int attempt = 0; attempt < 2; attempt++) {
+      final activeBase = await getBaseUrl();
+      try {
+        final url = Uri.parse('$activeBase/cashiers/logout');
+        final bodyData = cashierNameOrId != null
+            ? {'cashier': cashierNameOrId}
+            : <String, dynamic>{};
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(bodyData),
+            )
+            .timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          debugPrint('✅ Logout kasir berhasil di backend MariaDB ($activeBase)');
+          return true;
+        }
+        debugPrint('⚠️ logoutKasir HTTP ${response.statusCode}: ${response.body}');
+      } catch (e) {
+        debugPrint('⚠️ Gagal logout kasir (attempt ${attempt + 1}) via $activeBase: $e');
+      }
+      _workingBaseUrl = null;
+    }
+    return false;
+  }
+
+  /// Cek apakah kasir tertentu masih berstatus 'Aktif Melayani' di database
+  static Future<bool> isKasirActive(String? cashierNameOrId) async {
+    if (cashierNameOrId == null || cashierNameOrId.trim().isEmpty) return true;
+    try {
+      final list = await ambilDaftarKasir();
+      if (list.isEmpty) return true; // Fail-safe saat offline/reconnect
+
+      final clean = cashierNameOrId
+          .replaceAll(RegExp(r'\s*\(.*?\)'), '')
+          .trim()
+          .toLowerCase();
+
+      KasirModel? matched;
+      for (final c in list) {
+        if (c.name.toLowerCase() == clean ||
+            c.shortName.toLowerCase() == clean ||
+            c.id.toLowerCase() == clean) {
+          matched = c;
+          break;
+        }
+      }
+
+      // Jika kasir ini ditemukan di database tapi statusnya sudah Standby / Off
+      if (matched != null) {
+        return matched.statusLive == 'Aktif Melayani' && matched.isActive;
+      }
+    } catch (_) {}
+    return true;
+  }
+
   /// Cek koneksi ke server backend
   static Future<bool> cekKoneksi() async {
     final activeBase = await getBaseUrl();
@@ -383,53 +468,48 @@ class OmsetSummary {
     return dt.year == now.year && dt.month == now.month && dt.day == now.day;
   }
 
+  /// Helper untuk memeriksa apakah nama kasir bersifat generik / tidak spesifik
+  static bool _isGenericCashier(String? name) {
+    if (name == null) return true;
+    final clean = name.toLowerCase().trim();
+    return clean.isEmpty ||
+        clean == '-' ||
+        clean == 'kasir' ||
+        clean == 'pilih kasir' ||
+        clean == 'kasir prek dua dara' ||
+        clean == 'kasir prekduadara';
+  }
+
   /// Helper untuk mencocokkan apakah transaksi dilayani oleh kasir tertentu
   static bool isCashierMatch(String? txCashier, String? targetCashier) {
-    if (txCashier == null || targetCashier == null) return false;
-    final tx = txCashier.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
-    final target = targetCashier.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+    if (_isGenericCashier(txCashier) || _isGenericCashier(targetCashier)) {
+      return false;
+    }
+    final tx = txCashier!.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+    final target = targetCashier!.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
     if (tx.isEmpty || target.isEmpty) return false;
 
     if (tx == target) return true;
 
     // Cek kecocokan nama depan (misal "Rian" dengan "Rian Pratama")
-    final txFirst = tx.split(RegExp(r'\s+')).first;
-    final targetFirst = target.split(RegExp(r'\s+')).first;
-    if (txFirst.isNotEmpty && targetFirst.isNotEmpty && txFirst == targetFirst) {
+    final txParts = tx.split(RegExp(r'\s+'));
+    final targetParts = target.split(RegExp(r'\s+'));
+    if (txParts.isNotEmpty && targetParts.isNotEmpty && txParts.first == targetParts.first) {
+      if (txParts.length > 1 && targetParts.length > 1) {
+        return tx == target;
+      }
       return true;
     }
 
-    return tx.contains(target) || target.contains(tx);
+    return false;
   }
 
-  /// Helper untuk mendeteksi apakah transaksi jelas-jelas milik kasir staf lain
+  /// Helper untuk mendeteksi apakah transaksi jelas-jelas milik kasir staf lain (dinamis untuk semua kasir)
   static bool isDifferentCashier(String? txCashier, String? currentCashier) {
-    if (txCashier == null || currentCashier == null) return false;
-    final tx = txCashier.toLowerCase();
-    final cur = currentCashier.toLowerCase();
-
-    const knownCashiers = ['rian', 'siti', 'budi'];
-    String? txKnown;
-    for (var k in knownCashiers) {
-      if (tx.contains(k)) {
-        txKnown = k;
-        break;
-      }
+    if (_isGenericCashier(txCashier) || _isGenericCashier(currentCashier)) {
+      return false;
     }
-
-    String? curKnown;
-    for (var k in knownCashiers) {
-      if (cur.contains(k)) {
-        curKnown = k;
-        break;
-      }
-    }
-
-    if (txKnown != null && curKnown != null) {
-      return txKnown != curKnown;
-    }
-
-    return false;
+    return !isCashierMatch(txCashier, currentCashier);
   }
 
   /// Helper untuk mendeteksi nama shift dari kasir atau jam
@@ -587,17 +667,18 @@ class KasirModel {
   /// Nama bersih tanpa tanda kurung
   String get shortName => name.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
 
-  /// Nama shift ringkas (Shift Pagi / Shift Siang / Shift Malam)
+  /// Nama shift ringkas (Shift Pagi / Shift Siang / Shift Malam / Shift Kustom)
   String get shiftName {
     final s = shift.toLowerCase();
     if (s.contains('siang')) return 'Shift Siang';
     if (s.contains('malam')) return 'Shift Malam';
+    if (s.contains('kustom')) return 'Shift Kustom';
     return 'Shift Pagi';
   }
 
   /// Jam operasional shift
   String get shiftHours {
-    final match = RegExp(r'(\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2})').firstMatch(shift);
+    final match = RegExp(r'(\d{1,2}[:.]\d{2}\s*[-–]\s*\d{1,2}[:.]\d{2})').firstMatch(shift);
     if (match != null) {
       return '${match.group(1)} WIB';
     }
@@ -605,5 +686,39 @@ class KasirModel {
     if (s.contains('siang')) return '12:00 – 17:00 WIB';
     if (s.contains('malam')) return '17:00 – 22:00 WIB';
     return '08:00 – 12:00 WIB';
+  }
+
+  /// Cek apakah jam [now] masuk dalam rentang jam kerja shift kasir ini (termasuk jam kustom & lintas tengah malam)
+  bool isWorkingAt(DateTime now) {
+    final s = shift.toLowerCase();
+    if (s.contains('off') || s.contains('libur')) return false;
+
+    final match = RegExp(
+      r'(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})',
+    ).firstMatch(shift);
+
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    if (match != null) {
+      final startH = int.parse(match.group(1)!);
+      final startM = int.parse(match.group(2)!);
+      final endH = int.parse(match.group(3)!);
+      final endM = int.parse(match.group(4)!);
+
+      final startTotal = startH * 60 + startM;
+      final endTotal = endH * 60 + endM;
+
+      if (startTotal <= endTotal) {
+        return nowMinutes >= startTotal && nowMinutes < endTotal;
+      } else {
+        // Shift lintas tengah malam (misal 22:00 - 02:00)
+        return nowMinutes >= startTotal || nowMinutes < endTotal;
+      }
+    }
+
+    if (s.contains('pagi')) return now.hour >= 8 && now.hour < 12;
+    if (s.contains('siang')) return now.hour >= 12 && now.hour < 17;
+    if (s.contains('malam')) return now.hour >= 17 && now.hour < 22;
+    return false;
   }
 }

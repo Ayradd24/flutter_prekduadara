@@ -186,25 +186,7 @@ class _TransaksiPageState extends State<TransaksiPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 13, color: subTextGrey, height: 1.4),
             ),
-            if (apiResult['success'] == true) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F8F0),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFA7F3D0)),
-                ),
-                child: Text(
-                  '✓ Tersimpan di MariaDB (${apiResult['data']?['id'] ?? 'TRX'})',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF047857),
-                  ),
-                ),
-              ),
-            ] else ...[
+            if (apiResult['success'] != true) ...[
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -739,7 +721,11 @@ class _TransaksiPageState extends State<TransaksiPage> {
         child: Scaffold(
           key: _scaffoldKey,
           backgroundColor: bgYellow,
-          endDrawer: const AppDrawer(currentPage: 'transaksi'),
+          endDrawer: AppDrawer(
+            currentPage: 'transaksi',
+            currentKasir: widget.currentKasir,
+            currentShift: widget.currentShift,
+          ),
           body: Stack(
             children: [
               // Background Decorative Graphics (Diagonal Orange Ribbons)

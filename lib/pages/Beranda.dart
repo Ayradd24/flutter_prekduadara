@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../services/api_service.dart';
+import '../services/secure_storage_service.dart';
 import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
+import 'Login.dart';
 import 'Transaksi.dart';
 import 'LogTransaksi.dart';
 
@@ -95,9 +97,45 @@ class _BerandaPageState extends State<BerandaPage> {
     _loadProductsFromDatabase();
     _loadCashiers();
     _fetchOmsetData();
-    _omsetTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (mounted) _fetchOmsetData();
+    _omsetTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) {
+        _fetchOmsetData();
+        _checkActiveSession();
+      }
     });
+  }
+
+  bool _isAutoRedirecting = false;
+  int _sessionCheckTicks = 0;
+
+  /// Cek berkala apakah sesi kasir di perangkat ini telah ditutup dari device lain atau web
+  Future<void> _checkActiveSession() async {
+    if (_isAutoRedirecting || !mounted) return;
+    _sessionCheckTicks++;
+    if (_sessionCheckTicks < 2) return;
+
+    final isActive = await ApiService.isKasirActive(_effectiveKasir);
+    if (!isActive && mounted && !_isAutoRedirecting) {
+      _isAutoRedirecting = true;
+      _omsetTimer?.cancel();
+      await SecureStorageService().deleteAuthToken();
+      if (!mounted) return;
+
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Shift $_effectiveKasir telah ditutup dari perangkat lain.',
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   /// Sinkronisasi daftar staf kasir langsung dari backend MariaDB
@@ -105,18 +143,20 @@ class _BerandaPageState extends State<BerandaPage> {
     try {
       final list = await ApiService.ambilDaftarKasir();
       if (list.isNotEmpty && mounted) {
-        // Sinkronkan nama kasir aktif jika ada perubahan dari web/database
+        // Sinkronkan nama kasir aktif hanya jika benar-benar cocok di database
         final current = _effectiveKasir.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
-        final matched = list.firstWhere(
-          (c) =>
-              c.shortName.toLowerCase() == current.toLowerCase() ||
-              c.name.toLowerCase() == current.toLowerCase(),
-          orElse: () => list.first,
-        );
+        KasirModel? matched;
+        for (final c in list) {
+          if (c.shortName.toLowerCase() == current.toLowerCase() ||
+              c.name.toLowerCase() == current.toLowerCase()) {
+            matched = c;
+            break;
+          }
+        }
 
-        if (matched.name != current && matched.shortName != current) {
+        if (matched != null && matched.name != current && matched.shortName != current) {
           setState(() {
-            _currentKasir = matched.name;
+            _currentKasir = matched!.name;
           });
           await SettingsService.setLastKasir(matched.name);
         }
