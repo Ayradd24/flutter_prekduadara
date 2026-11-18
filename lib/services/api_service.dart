@@ -398,6 +398,36 @@ class ApiService {
     return false;
   }
 
+  /// Cek apakah kasir tertentu masih berstatus 'Aktif Melayani' di database
+  static Future<bool> isKasirActive(String? cashierNameOrId) async {
+    if (cashierNameOrId == null || cashierNameOrId.trim().isEmpty) return true;
+    try {
+      final list = await ambilDaftarKasir();
+      if (list.isEmpty) return true; // Fail-safe saat offline/reconnect
+
+      final clean = cashierNameOrId
+          .replaceAll(RegExp(r'\s*\(.*?\)'), '')
+          .trim()
+          .toLowerCase();
+
+      KasirModel? matched;
+      for (final c in list) {
+        if (c.name.toLowerCase() == clean ||
+            c.shortName.toLowerCase() == clean ||
+            c.id.toLowerCase() == clean) {
+          matched = c;
+          break;
+        }
+      }
+
+      // Jika kasir ini ditemukan di database tapi statusnya sudah Standby / Off
+      if (matched != null) {
+        return matched.statusLive == 'Aktif Melayani' && matched.isActive;
+      }
+    } catch (_) {}
+    return true;
+  }
+
   /// Cek koneksi ke server backend
   static Future<bool> cekKoneksi() async {
     final activeBase = await getBaseUrl();

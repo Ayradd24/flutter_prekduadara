@@ -122,9 +122,45 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
       if (k != null && mounted) setState(() => _savedKasir = k);
     });
     _fetchTransactions();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (mounted) _fetchTransactions();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) {
+        _fetchTransactions();
+        _checkActiveSession();
+      }
     });
+  }
+
+  bool _isAutoRedirecting = false;
+  int _sessionCheckTicks = 0;
+
+  /// Cek berkala apakah sesi kasir di perangkat ini telah ditutup dari device lain atau web
+  Future<void> _checkActiveSession() async {
+    if (_isAutoRedirecting || !mounted) return;
+    _sessionCheckTicks++;
+    if (_sessionCheckTicks < 2) return;
+
+    final isActive = await ApiService.isKasirActive(_effectiveKasir);
+    if (!isActive && mounted && !_isAutoRedirecting) {
+      _isAutoRedirecting = true;
+      _refreshTimer?.cancel();
+      await SecureStorageService().deleteAuthToken();
+      if (!mounted) return;
+
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Shift $_effectiveKasir telah ditutup dari perangkat lain.',
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
