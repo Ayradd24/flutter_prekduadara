@@ -425,53 +425,48 @@ class OmsetSummary {
     return dt.year == now.year && dt.month == now.month && dt.day == now.day;
   }
 
+  /// Helper untuk memeriksa apakah nama kasir bersifat generik / tidak spesifik
+  static bool _isGenericCashier(String? name) {
+    if (name == null) return true;
+    final clean = name.toLowerCase().trim();
+    return clean.isEmpty ||
+        clean == '-' ||
+        clean == 'kasir' ||
+        clean == 'pilih kasir' ||
+        clean == 'kasir prek dua dara' ||
+        clean == 'kasir prekduadara';
+  }
+
   /// Helper untuk mencocokkan apakah transaksi dilayani oleh kasir tertentu
   static bool isCashierMatch(String? txCashier, String? targetCashier) {
-    if (txCashier == null || targetCashier == null) return false;
-    final tx = txCashier.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
-    final target = targetCashier.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+    if (_isGenericCashier(txCashier) || _isGenericCashier(targetCashier)) {
+      return false;
+    }
+    final tx = txCashier!.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+    final target = targetCashier!.toLowerCase().replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
     if (tx.isEmpty || target.isEmpty) return false;
 
     if (tx == target) return true;
 
     // Cek kecocokan nama depan (misal "Rian" dengan "Rian Pratama")
-    final txFirst = tx.split(RegExp(r'\s+')).first;
-    final targetFirst = target.split(RegExp(r'\s+')).first;
-    if (txFirst.isNotEmpty && targetFirst.isNotEmpty && txFirst == targetFirst) {
+    final txParts = tx.split(RegExp(r'\s+'));
+    final targetParts = target.split(RegExp(r'\s+'));
+    if (txParts.isNotEmpty && targetParts.isNotEmpty && txParts.first == targetParts.first) {
+      if (txParts.length > 1 && targetParts.length > 1) {
+        return tx == target;
+      }
       return true;
     }
 
-    return tx.contains(target) || target.contains(tx);
+    return false;
   }
 
-  /// Helper untuk mendeteksi apakah transaksi jelas-jelas milik kasir staf lain
+  /// Helper untuk mendeteksi apakah transaksi jelas-jelas milik kasir staf lain (dinamis untuk semua kasir)
   static bool isDifferentCashier(String? txCashier, String? currentCashier) {
-    if (txCashier == null || currentCashier == null) return false;
-    final tx = txCashier.toLowerCase();
-    final cur = currentCashier.toLowerCase();
-
-    const knownCashiers = ['rian', 'siti', 'budi'];
-    String? txKnown;
-    for (var k in knownCashiers) {
-      if (tx.contains(k)) {
-        txKnown = k;
-        break;
-      }
+    if (_isGenericCashier(txCashier) || _isGenericCashier(currentCashier)) {
+      return false;
     }
-
-    String? curKnown;
-    for (var k in knownCashiers) {
-      if (cur.contains(k)) {
-        curKnown = k;
-        break;
-      }
-    }
-
-    if (txKnown != null && curKnown != null) {
-      return txKnown != curKnown;
-    }
-
-    return false;
+    return !isCashierMatch(txCashier, currentCashier);
   }
 
   /// Helper untuk mendeteksi nama shift dari kasir atau jam

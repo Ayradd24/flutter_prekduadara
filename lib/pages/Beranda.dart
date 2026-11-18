@@ -105,18 +105,20 @@ class _BerandaPageState extends State<BerandaPage> {
     try {
       final list = await ApiService.ambilDaftarKasir();
       if (list.isNotEmpty && mounted) {
-        // Sinkronkan nama kasir aktif jika ada perubahan dari web/database
+        // Sinkronkan nama kasir aktif hanya jika benar-benar cocok di database
         final current = _effectiveKasir.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
-        final matched = list.firstWhere(
-          (c) =>
-              c.shortName.toLowerCase() == current.toLowerCase() ||
-              c.name.toLowerCase() == current.toLowerCase(),
-          orElse: () => list.first,
-        );
+        KasirModel? matched;
+        for (final c in list) {
+          if (c.shortName.toLowerCase() == current.toLowerCase() ||
+              c.name.toLowerCase() == current.toLowerCase()) {
+            matched = c;
+            break;
+          }
+        }
 
-        if (matched.name != current && matched.shortName != current) {
+        if (matched != null && matched.name != current && matched.shortName != current) {
           setState(() {
-            _currentKasir = matched.name;
+            _currentKasir = matched!.name;
           });
           await SettingsService.setLastKasir(matched.name);
         }
