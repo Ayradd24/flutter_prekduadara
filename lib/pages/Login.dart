@@ -590,6 +590,9 @@ class _LoginPageState extends State<LoginPage> {
                       );
                       await SettingsService.setLastKasir(_currentKasir);
 
+                      // Sinkronkan status live ke MariaDB agar di web langsung tampil "Aktif Melayani"
+                      ApiService.loginKasir(_currentKasir);
+
                       navigator.pushReplacement(
                         MaterialPageRoute(
                           builder: (context) => BerandaPage(

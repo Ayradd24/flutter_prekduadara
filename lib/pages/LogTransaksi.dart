@@ -390,6 +390,8 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             ),
             onPressed: () {
               Navigator.pop(ctx);
+              // Sinkronkan status kasir menjadi Standby di backend MariaDB
+              ApiService.logoutKasir(_effectiveKasir);
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(
