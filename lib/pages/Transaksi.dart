@@ -739,7 +739,11 @@ class _TransaksiPageState extends State<TransaksiPage> {
         child: Scaffold(
           key: _scaffoldKey,
           backgroundColor: bgYellow,
-          endDrawer: const AppDrawer(currentPage: 'transaksi'),
+          endDrawer: AppDrawer(
+            currentPage: 'transaksi',
+            currentKasir: widget.currentKasir,
+            currentShift: widget.currentShift,
+          ),
           body: Stack(
             children: [
               // Background Decorative Graphics (Diagonal Orange Ribbons)

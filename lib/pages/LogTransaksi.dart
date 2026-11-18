@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
+import '../services/secure_storage_service.dart';
 import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
 import 'Login.dart';
@@ -364,54 +365,78 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   }
 
   void _handleCloseShift() {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+    bool isClosing = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Konfirmasi Tutup Shift',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Apakah Anda yakin ingin menutup shift saat ini? Total omset dan transaksi akan direkap secara otomatis.',
-          style: TextStyle(fontSize: 13, color: subTextGrey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal', style: TextStyle(color: subTextGrey)),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Konfirmasi Tutup Shift',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+          content: const Text(
+            'Apakah Anda yakin ingin menutup shift saat ini? Total omset dan transaksi akan direkap secara otomatis.',
+            style: TextStyle(fontSize: 13, color: subTextGrey),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isClosing ? null : () => Navigator.pop(ctx),
+              child: const Text('Batal', style: TextStyle(color: subTextGrey)),
             ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              // Sinkronkan status kasir menjadi Standby di backend MariaDB
-              await ApiService.logoutKasir(_effectiveKasir);
-              if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const LoginPage(),
-                  ),
-                  (route) => false,
-                );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Shift berhasil ditutup!'),
-                    duration: Duration(seconds: 1),
-                    backgroundColor: primaryGreen,
-                  ),
-                );
-              }
-            },
-            child: const Text('Tutup Shift', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: isClosing
+                  ? null
+                  : () async {
+                      setDialogState(() => isClosing = true);
+                      // Sinkronkan status kasir menjadi Standby di backend MariaDB
+                      final synced = await ApiService.logoutKasir(_effectiveKasir);
+                      // Hapus sesi kasir aktif secara aman
+                      await SecureStorageService().deleteAuthToken();
+
+                      navigator.pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => const LoginPage(),
+                        ),
+                        (route) => false,
+                      );
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            synced
+                                ? 'Shift berhasil ditutup!'
+                                : 'Shift ditutup (gagal sinkron ke server, cek koneksi)',
+                          ),
+                          duration: const Duration(seconds: 2),
+                          backgroundColor: synced
+                              ? primaryGreen
+                              : const Color(0xFFD97706),
+                        ),
+                      );
+                    },
+              child: isClosing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Tutup Shift', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }

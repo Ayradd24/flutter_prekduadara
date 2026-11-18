@@ -345,44 +345,57 @@ class ApiService {
 
   /// Tandai kasir sedang aktif melayani (login shift) di backend MariaDB
   static Future<bool> loginKasir(String cashierNameOrId) async {
-    final activeBase = await getBaseUrl();
-    try {
-      final url = Uri.parse('$activeBase/cashiers/login');
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'cashier': cashierNameOrId}),
-          )
-          .timeout(const Duration(seconds: 4));
-      if (response.statusCode == 200) {
-        debugPrint('✅ Kasir $cashierNameOrId berhasil login aktif di backend MariaDB');
-        return true;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      final activeBase = await getBaseUrl();
+      try {
+        final url = Uri.parse('$activeBase/cashiers/login');
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'cashier': cashierNameOrId}),
+            )
+            .timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          debugPrint('✅ Kasir $cashierNameOrId berhasil login aktif di backend MariaDB ($activeBase)');
+          return true;
+        }
+        debugPrint('⚠️ loginKasir HTTP ${response.statusCode}: ${response.body}');
+      } catch (e) {
+        debugPrint('⚠️ Gagal login kasir (attempt ${attempt + 1}) via $activeBase: $e');
       }
-    } catch (e) {
-      debugPrint('Gagal login kasir ke backend: $e');
+      _workingBaseUrl = null;
     }
     return false;
   }
 
   /// Tandai kasir selesai shift / standby di backend MariaDB
   static Future<bool> logoutKasir([String? cashierNameOrId]) async {
-    final activeBase = await getBaseUrl();
-    try {
-      final url = Uri.parse('$activeBase/cashiers/logout');
-      final bodyData = cashierNameOrId != null ? {'cashier': cashierNameOrId} : <String, dynamic>{};
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(bodyData),
-          )
-          .timeout(const Duration(seconds: 4));
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Gagal logout kasir ke backend: $e');
-      return false;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      final activeBase = await getBaseUrl();
+      try {
+        final url = Uri.parse('$activeBase/cashiers/logout');
+        final bodyData = cashierNameOrId != null
+            ? {'cashier': cashierNameOrId}
+            : <String, dynamic>{};
+        final response = await http
+            .post(
+              url,
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(bodyData),
+            )
+            .timeout(const Duration(seconds: 5));
+        if (response.statusCode == 200) {
+          debugPrint('✅ Logout kasir berhasil di backend MariaDB ($activeBase)');
+          return true;
+        }
+        debugPrint('⚠️ logoutKasir HTTP ${response.statusCode}: ${response.body}');
+      } catch (e) {
+        debugPrint('⚠️ Gagal logout kasir (attempt ${attempt + 1}) via $activeBase: $e');
+      }
+      _workingBaseUrl = null;
     }
+    return false;
   }
 
   /// Cek koneksi ke server backend
