@@ -629,17 +629,18 @@ class KasirModel {
   /// Nama bersih tanpa tanda kurung
   String get shortName => name.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
 
-  /// Nama shift ringkas (Shift Pagi / Shift Siang / Shift Malam)
+  /// Nama shift ringkas (Shift Pagi / Shift Siang / Shift Malam / Shift Kustom)
   String get shiftName {
     final s = shift.toLowerCase();
     if (s.contains('siang')) return 'Shift Siang';
     if (s.contains('malam')) return 'Shift Malam';
+    if (s.contains('kustom')) return 'Shift Kustom';
     return 'Shift Pagi';
   }
 
   /// Jam operasional shift
   String get shiftHours {
-    final match = RegExp(r'(\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2})').firstMatch(shift);
+    final match = RegExp(r'(\d{1,2}[:.]\d{2}\s*[-–]\s*\d{1,2}[:.]\d{2})').firstMatch(shift);
     if (match != null) {
       return '${match.group(1)} WIB';
     }
@@ -647,5 +648,39 @@ class KasirModel {
     if (s.contains('siang')) return '12:00 – 17:00 WIB';
     if (s.contains('malam')) return '17:00 – 22:00 WIB';
     return '08:00 – 12:00 WIB';
+  }
+
+  /// Cek apakah jam [now] masuk dalam rentang jam kerja shift kasir ini (termasuk jam kustom & lintas tengah malam)
+  bool isWorkingAt(DateTime now) {
+    final s = shift.toLowerCase();
+    if (s.contains('off') || s.contains('libur')) return false;
+
+    final match = RegExp(
+      r'(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})',
+    ).firstMatch(shift);
+
+    final nowMinutes = now.hour * 60 + now.minute;
+
+    if (match != null) {
+      final startH = int.parse(match.group(1)!);
+      final startM = int.parse(match.group(2)!);
+      final endH = int.parse(match.group(3)!);
+      final endM = int.parse(match.group(4)!);
+
+      final startTotal = startH * 60 + startM;
+      final endTotal = endH * 60 + endM;
+
+      if (startTotal <= endTotal) {
+        return nowMinutes >= startTotal && nowMinutes < endTotal;
+      } else {
+        // Shift lintas tengah malam (misal 22:00 - 02:00)
+        return nowMinutes >= startTotal || nowMinutes < endTotal;
+      }
+    }
+
+    if (s.contains('pagi')) return now.hour >= 8 && now.hour < 12;
+    if (s.contains('siang')) return now.hour >= 12 && now.hour < 17;
+    if (s.contains('malam')) return now.hour >= 17 && now.hour < 22;
+    return false;
   }
 }

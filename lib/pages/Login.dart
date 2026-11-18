@@ -63,19 +63,8 @@ class _LoginPageState extends State<LoginPage> {
           _cashiers = list;
         });
 
-        // Cek kasir yang terakhir bertugas di sesi sebelumnya
-        final savedKasirName = await SettingsService.getLastKasir();
-        KasirModel matched;
-        if (savedKasirName != null && savedKasirName.isNotEmpty) {
-          matched = list.firstWhere(
-            (c) =>
-                c.shortName.toLowerCase() == savedKasirName.toLowerCase() ||
-                c.name.toLowerCase() == savedKasirName.toLowerCase(),
-            orElse: () => _findBestKasirByHour(list),
-          );
-        } else {
-          matched = _findBestKasirByHour(list);
-        }
+        // Pilih kasir secara otomatis sesuai jam/shift yang sedang bekerja saat ini
+        final matched = _findBestKasirByHour(list);
 
         if (mounted) {
           _selectKasir(matched);
@@ -87,14 +76,26 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   KasirModel _findBestKasirByHour(List<KasirModel> list) {
-    final hour = DateTime.now().hour;
+    final activeList = list.where((c) => c.isActive).toList();
+    final pool = activeList.isNotEmpty ? activeList : list;
+    final now = DateTime.now();
+
+    // 1. Prioritas utama: Kasir yang jam kerjanya (reguler maupun jam kustom) mencakup waktu sekarang
+    for (final c in pool) {
+      if (c.isWorkingAt(now)) {
+        return c;
+      }
+    }
+
+    // 2. Fallback: Cocokkan berdasarkan pembagian shift umum
+    final hour = now.hour;
     String target = 'pagi';
     if (hour >= 12 && hour < 17) target = 'siang';
     if (hour >= 17 || hour < 8) target = 'malam';
 
-    return list.firstWhere(
+    return pool.firstWhere(
       (c) => c.shift.toLowerCase().contains(target),
-      orElse: () => list.first,
+      orElse: () => pool.first,
     );
   }
 
