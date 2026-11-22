@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/order_state_service.dart';
 import '../services/secure_storage_service.dart';
 import '../pages/Beranda.dart';
 import '../pages/LogTransaksi.dart';
@@ -219,6 +220,7 @@ class AppDrawer extends StatelessWidget {
                   ? null
                   : () async {
                       setDialogState(() => isClosing = true);
+                      OrderStateService.clearOrder();
                       // Sinkronkan status kasir menjadi Standby di backend MariaDB
                       final synced = await ApiService.logoutKasir(currentKasir);
                       // Hapus sesi kasir aktif secara aman

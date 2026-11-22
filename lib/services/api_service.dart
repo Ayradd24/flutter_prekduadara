@@ -212,6 +212,28 @@ class ApiService {
     return [];
   }
 
+  /// Ambil seluruh daftar produk resmi dari endpoint publik backend MariaDB (/api/products)
+  static Future<List<Map<String, dynamic>>> ambilDaftarProduk() async {
+    final activeBase = await getBaseUrl();
+
+    try {
+      final url = Uri.parse('$activeBase/products');
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['success'] == true && json['data'] is List) {
+          debugPrint('✅ Ambil produk sukses dari $activeBase: ${(json['data'] as List).length} menu');
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+    } catch (e) {
+      debugPrint('Gagal ambil daftar produk dari $activeBase: $e');
+    }
+
+    return [];
+  }
+
   /// Ambil ringkasan omset shift dari database MariaDB (secara default hanya hari ini)
   static Future<OmsetSummary> ambilOmsetSummary({
     bool todayOnly = true,

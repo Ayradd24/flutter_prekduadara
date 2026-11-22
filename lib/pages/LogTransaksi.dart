@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
+import '../services/order_state_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
@@ -22,11 +23,13 @@ class TransactionItemDetail {
   final String name;
   final int quantity;
   final int price;
+  final String? sambal;
 
   TransactionItemDetail({
     required this.name,
     required this.quantity,
     required this.price,
+    this.sambal,
   });
 }
 
@@ -143,6 +146,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
     if (!isActive && mounted && !_isAutoRedirecting) {
       _isAutoRedirecting = true;
       _refreshTimer?.cancel();
+      OrderStateService.clearOrder();
       await SecureStorageService().deleteAuthToken();
       if (!mounted) return;
 
@@ -251,6 +255,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   name: it['name']?.toString() ?? 'Menu',
                   quantity: int.tryParse(it['quantity']?.toString() ?? '1') ?? 1,
                   price: int.tryParse(it['price']?.toString() ?? '0') ?? 0,
+                  sambal: it['sambal']?.toString(),
                 ));
               }
             }
@@ -264,6 +269,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                       name: it['name']?.toString() ?? 'Menu',
                       quantity: int.tryParse(it['quantity']?.toString() ?? '1') ?? 1,
                       price: int.tryParse(it['price']?.toString() ?? '0') ?? 0,
+                      sambal: it['sambal']?.toString(),
                     ));
                   }
                 }
@@ -435,6 +441,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   ? null
                   : () async {
                       setDialogState(() => isClosing = true);
+                      OrderStateService.clearOrder();
                       // Sinkronkan status kasir menjadi Standby di backend MariaDB
                       final synced = await ApiService.logoutKasir(_effectiveKasir);
                       // Hapus sesi kasir aktif secara aman
@@ -1281,17 +1288,48 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   ...trx.details.map((detail) => Padding(
                         padding: const EdgeInsets.only(bottom: 6),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment:
                               MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
-                              child: Text(
-                                '• ${detail.quantity}x ${detail.name}',
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: textDark,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '• ${detail.quantity}x ${detail.name}',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textDark,
+                                    ),
+                                  ),
+                                  if (detail.sambal != null &&
+                                      detail.sambal!.trim().isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          left: 10, top: 2),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFEF2F2),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                              color: const Color(0xFFFECACA)),
+                                        ),
+                                        child: Text(
+                                          '🌶️ ${detail.sambal}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFFDC2626),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             Text(
