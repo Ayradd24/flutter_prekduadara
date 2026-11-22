@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../database/app_database.dart';
 import '../services/api_service.dart';
+import '../services/order_state_service.dart';
 import '../services/secure_storage_service.dart';
 import '../services/settings_service.dart';
 import '../widget/app_drawer.dart';
@@ -17,6 +18,24 @@ const Color ribbonOrange = Color(0xFFE57E25);
 const Color textDark = Color(0xFF111111);
 const Color subTextGrey = Color(0xFF6B7280);
 const Color qrisBlue = Color(0xFF2563EB);
+
+class ProductMenuItem {
+  final String id;
+  final String name;
+  final String description;
+  final int price;
+  final String category;
+  final String imageUrl;
+
+  ProductMenuItem({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.price,
+    required this.category,
+    required this.imageUrl,
+  });
+}
 
 class BerandaPage extends StatefulWidget {
   final String? currentKasir;
@@ -47,6 +66,68 @@ class _BerandaPageState extends State<BerandaPage> {
   bool _isLoadingOmset = true;
   Timer? _omsetTimer;
 
+  static final List<ProductMenuItem> _defaultProducts = [
+    ProductMenuItem(
+      id: '1',
+      name: 'Ayam Geprek Bakar + Es Teh',
+      description: 'Nasi + Ayam Geprek Bakar + Es Teh',
+      price: 18000,
+      category: 'Paket Menu',
+      imageUrl: 'assets/images/geprek_bakar.jpg',
+    ),
+    ProductMenuItem(
+      id: '2',
+      name: 'Ayam Geprek Biasa + Es Teh',
+      description: 'Nasi + Ayam Geprek Biasa + Es Teh',
+      price: 17000,
+      category: 'Paket Menu',
+      imageUrl: 'assets/images/geprek_biasa.jpg',
+    ),
+    ProductMenuItem(
+      id: '3',
+      name: 'Ayam Geprek Mozzarella + Es Teh',
+      description: 'Paket ayam geprek krispi dengan lelehan keju mozzarella, nasi & es teh sepuasnya',
+      price: 22000,
+      category: 'Paket Menu',
+      imageUrl: 'assets/images/geprek_mozzarella.jpg',
+    ),
+    ProductMenuItem(
+      id: '4',
+      name: 'Ayam Geprek (Tanpa Nasi)',
+      description: 'Potongan ayam geprek krispi tanpa nasi',
+      price: 13000,
+      category: 'Tambahan',
+      imageUrl: 'assets/images/geprek_tanpa_nasi.jpg',
+    ),
+    ProductMenuItem(
+      id: '5',
+      name: 'Tahu & Tempe Geprek',
+      description: 'Lauk pendamping tahu dan tempe goreng tepung krispi',
+      price: 6000,
+      category: 'Tambahan',
+      imageUrl: 'assets/images/tahu_tempe.jpg',
+    ),
+    ProductMenuItem(
+      id: '6',
+      name: 'Telur Krispi',
+      description: 'Telur dadar goreng tepung renyah',
+      price: 5000,
+      category: 'Tambahan',
+      imageUrl: 'assets/images/telur_krispi.jpg',
+    ),
+    ProductMenuItem(
+      id: '7',
+      name: 'Jamur Krispi',
+      description: 'Jamur tiram goreng tepung gurih dan renyah',
+      price: 7000,
+      category: 'Tambahan',
+      imageUrl: 'assets/images/jamur_krispi.jpg',
+    ),
+  ];
+
+  late List<ProductMenuItem> _menuProducts;
+  String _selectedCategoryFilter = 'Semua';
+
   String get _effectiveKasir {
     if (_currentKasir != null && _currentKasir!.isNotEmpty && _currentKasir != 'Pilih Kasir') {
       return _currentKasir!;
@@ -74,14 +155,21 @@ class _BerandaPageState extends State<BerandaPage> {
   }
 
   // Map of item quantities added
-  final Map<String, int> _itemCounts = {
-    'Ayam Geprek Bakar + Es Teh': 0,
-    'Ayam Geprek Biasa + Es Teh': 0,
-  };
+  final Map<String, int> _itemCounts = {};
+
+  // Cek apakah ada pesanan yang sedang dipilih
+  bool get _hasOrder => _itemCounts.values.any((count) => count > 0);
 
   @override
   void initState() {
     super.initState();
+    _menuProducts = List.from(_defaultProducts);
+    for (var p in _menuProducts) {
+      _itemCounts[p.name] = OrderStateService.getItemCount(p.name);
+    }
+    for (var entry in OrderStateService.itemCounts.entries) {
+      _itemCounts[entry.key] = entry.value;
+    }
     _currentKasir = widget.currentKasir;
     _currentShift = widget.currentShift;
     if (_currentKasir == null) {
@@ -118,6 +206,7 @@ class _BerandaPageState extends State<BerandaPage> {
     if (!isActive && mounted && !_isAutoRedirecting) {
       _isAutoRedirecting = true;
       _omsetTimer?.cancel();
+      OrderStateService.clearOrder();
       await SecureStorageService().deleteAuthToken();
       if (!mounted) return;
 
@@ -208,22 +297,65 @@ class _BerandaPageState extends State<BerandaPage> {
 
   Future<void> _loadProductsFromDatabase() async {
     try {
+      // 1. Ambil dari endpoint publik backend MariaDB (/api/products)
+      final apiProducts = await ApiService.ambilDaftarProduk();
+      if (mounted && apiProducts.isNotEmpty) {
+        setState(() {
+          _menuProducts = apiProducts.map((p) {
+            final name = p['name']?.toString() ?? '';
+            String img = p['image']?.toString() ?? '';
+            if (img.trim().isEmpty) {
+              final lower = name.toLowerCase();
+              if (lower.contains('bakar')) {
+                img = 'assets/images/geprek_bakar.jpg';
+              } else if (lower.contains('mozzarella')) {
+                img = 'assets/images/geprek_mozzarella.jpg';
+              } else if (lower.contains('tanpa nasi')) {
+                img = 'assets/images/geprek_tanpa_nasi.jpg';
+              } else if (lower.contains('biasa')) {
+                img = 'assets/images/geprek_biasa.jpg';
+              } else if (lower.contains('tahu')) {
+                img = 'assets/images/tahu_tempe.jpg';
+              } else if (lower.contains('telur')) {
+                img = 'assets/images/telur_krispi.jpg';
+              } else if (lower.contains('jamur')) {
+                img = 'assets/images/jamur_krispi.jpg';
+              }
+            }
+            return ProductMenuItem(
+              id: p['id']?.toString() ?? '',
+              name: name,
+              description: p['description']?.toString() ?? '',
+              price: int.tryParse(p['price']?.toString() ?? '0') ?? 0,
+              category: p['category']?.toString() ?? 'Paket Menu',
+              imageUrl: img,
+            );
+          }).toList();
+          for (var p in _menuProducts) {
+            _itemCounts[p.name] = OrderStateService.getItemCount(p.name);
+          }
+        });
+        return;
+      }
+
+      // 2. Fallback: baca dari local SQLite Drift
       final dbProducts = await AppDatabase.instance.getAllProducts();
       if (mounted && dbProducts.isNotEmpty) {
         setState(() {
           for (var p in dbProducts) {
-            _itemCounts.putIfAbsent(p.name, () => 0);
+            _itemCounts[p.name] = OrderStateService.getItemCount(p.name);
           }
         });
       }
     } catch (e) {
-      debugPrint('Error loading products from local db: $e');
+      debugPrint('Error loading products: $e');
     }
   }
 
   void _addItem(String name, int price) {
+    OrderStateService.addItem(name);
     setState(() {
-      _itemCounts[name] = (_itemCounts[name] ?? 0) + 1;
+      _itemCounts[name] = OrderStateService.getItemCount(name);
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -238,11 +370,9 @@ class _BerandaPageState extends State<BerandaPage> {
   }
 
   void _removeItem(String name) {
+    OrderStateService.removeItem(name);
     setState(() {
-      final current = _itemCounts[name] ?? 0;
-      if (current > 0) {
-        _itemCounts[name] = current - 1;
-      }
+      _itemCounts[name] = OrderStateService.getItemCount(name);
     });
   }
 
@@ -298,52 +428,69 @@ class _BerandaPageState extends State<BerandaPage> {
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          12,
+                          16,
+                          _hasOrder ? 100 : 24,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                          // Cashier Status Card
-                          _buildCashierStatusCard(),
-                          const SizedBox(height: 12),
+                            // Cashier Status Card
+                            _buildCashierStatusCard(),
+                            const SizedBox(height: 12),
 
-                          // Omset Shift Card
-                          _buildOmsetCard(),
-                          const SizedBox(height: 16),
+                            // Omset Shift Card
+                            _buildOmsetCard(),
+                            const SizedBox(height: 16),
 
-                          // Menu Section Header
-                          _buildMenuHeader(),
-                          const SizedBox(height: 10),
+                            // Menu Section Header
+                            _buildMenuHeader(),
+                            const SizedBox(height: 12),
 
-                          // Menu Item 1: Geprek Bakar + Es Teh
-                          _buildMenuItemCard(
-                            title: 'Ayam Geprek Bakar + Es Teh',
-                            description:
-                                'Nasi + Ayam Geprek Bakar + Es Teh',
-                            price: 18000,
-                            imageUrl: 'assets/images/geprek_bakar.jpg',
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Menu Item 2: Geprek Biasa + Es Teh
-                          _buildMenuItemCard(
-                            title: 'Ayam Geprek Biasa + Es Teh',
-                            description:
-                                'Nasi + Ayam Geprek Biasa + Es Teh',
-                            price: 17000,
-                            imageUrl: 'assets/images/geprek_biasa.jpg',
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Tombol Konfirmasi dan Bayar
-                          _buildConfirmPayButton(),
-                          const SizedBox(height: 12),
-                        ],
+                            // Daftar Menu Produk Dinamis (7 Menu)
+                            ..._menuProducts
+                                .where((p) =>
+                                    _selectedCategoryFilter == 'Semua' ||
+                                    p.category == _selectedCategoryFilter)
+                                .map((p) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: _buildMenuItemCard(
+                                        title: p.name,
+                                        description: p.description,
+                                        price: p.price,
+                                        imageUrl: p.imageUrl,
+                                        category: p.category,
+                                      ),
+                                    )),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
               ],
+            ),
+
+            // Tombol Konfirmasi dan Bayar Melayang (Floating di Bawah Layar Saat Ada Pesanan)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              left: 16,
+              right: 16,
+              bottom: _hasOrder ? 16 : -110,
+              child: SafeArea(
+                top: false,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 250),
+                  opacity: _hasOrder ? 1.0 : 0.0,
+                  child: IgnorePointer(
+                    ignoring: !_hasOrder,
+                    child: _buildConfirmPayButton(),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -737,6 +884,53 @@ class _BerandaPageState extends State<BerandaPage> {
             color: textDark,
           ),
         ),
+        const SizedBox(height: 10),
+        // Filter Kategori (Semua, Paket Menu, Tambahan)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: ['Semua', 'Paket Menu', 'Tambahan'].map((cat) {
+              final isSel = _selectedCategoryFilter == cat;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedCategoryFilter = cat;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSel ? primaryGreen : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSel ? primaryGreen : const Color(0xFFE5E7EB),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      cat,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                        color: isSel ? Colors.white : textDark,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ],
     );
   }
@@ -747,6 +941,7 @@ class _BerandaPageState extends State<BerandaPage> {
     required String description,
     required int price,
     required String imageUrl,
+    String? category,
   }) {
     final count = _itemCounts[title] ?? 0;
 
@@ -772,35 +967,44 @@ class _BerandaPageState extends State<BerandaPage> {
             child: SizedBox(
               width: 76,
               height: 76,
-              child: imageUrl.startsWith('http')
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: const Color(0xFFE5E7EB),
-                          child: const Icon(
-                            Icons.fastfood_rounded,
-                            color: Color(0xFF9CA3AF),
-                            size: 32,
-                          ),
-                        );
-                      },
+              child: imageUrl.isEmpty
+                  ? Container(
+                      color: const Color(0xFFF3F4F6),
+                      child: const Icon(
+                        Icons.fastfood_rounded,
+                        color: Color(0xFF9CA3AF),
+                        size: 32,
+                      ),
                     )
-                  : Image.asset(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: const Color(0xFFE5E7EB),
-                          child: const Icon(
-                            Icons.fastfood_rounded,
-                            color: Color(0xFF9CA3AF),
-                            size: 32,
-                          ),
-                        );
-                      },
-                    ),
+                  : imageUrl.startsWith('http')
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: const Color(0xFFE5E7EB),
+                              child: const Icon(
+                                Icons.fastfood_rounded,
+                                color: Color(0xFF9CA3AF),
+                                size: 32,
+                              ),
+                            );
+                          },
+                        )
+                      : Image.asset(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: const Color(0xFFE5E7EB),
+                              child: const Icon(
+                                Icons.fastfood_rounded,
+                                color: Color(0xFF9CA3AF),
+                                size: 32,
+                              ),
+                            );
+                          },
+                        ),
             ),
           ),
           const SizedBox(width: 12),
@@ -810,6 +1014,30 @@ class _BerandaPageState extends State<BerandaPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (category != null && category.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: category == 'Paket Menu'
+                            ? const Color(0xFFFEF3C7)
+                            : const Color(0xFFE0E7FF),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        category,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                          color: category == 'Paket Menu'
+                              ? const Color(0xFF92400E)
+                              : const Color(0xFF3730A3),
+                        ),
+                      ),
+                    ),
+                  ),
                 Text(
                   title,
                   style: const TextStyle(
@@ -911,8 +1139,10 @@ class _BerandaPageState extends State<BerandaPage> {
     final totalCount = _itemCounts.values.fold(0, (sum, count) => sum + count);
     final bool hasOrder = totalCount > 0;
     int totalPrice = 0;
-    totalPrice += (_itemCounts['Ayam Geprek Bakar + Es Teh'] ?? 0) * 18000;
-    totalPrice += (_itemCounts['Ayam Geprek Biasa + Es Teh'] ?? 0) * 17000;
+    for (var product in _menuProducts) {
+      final count = _itemCounts[product.name] ?? 0;
+      totalPrice += count * product.price;
+    }
 
     return Container(
       width: double.infinity,
@@ -977,8 +1207,15 @@ class _BerandaPageState extends State<BerandaPage> {
           if (mounted) {
             _fetchOmsetData();
             if (result == true) {
+              OrderStateService.clearOrder();
               setState(() {
                 _itemCounts.updateAll((key, value) => 0);
+              });
+            } else {
+              setState(() {
+                for (var p in _menuProducts) {
+                  _itemCounts[p.name] = OrderStateService.getItemCount(p.name);
+                }
               });
             }
           }

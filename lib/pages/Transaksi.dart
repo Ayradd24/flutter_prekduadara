@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../widget/app_drawer.dart';
 import 'Beranda.dart';
 import '../services/api_service.dart';
+import '../services/order_state_service.dart';
 import '../services/settings_service.dart';
 
 // Palette warna konsisten tema PrekDuaDara
@@ -21,6 +22,7 @@ class MenuItemData {
   final int price;
   final int? originalPrice;
   final String imageUrl;
+  final String description;
 
   MenuItemData({
     required this.id,
@@ -29,19 +31,47 @@ class MenuItemData {
     required this.price,
     this.originalPrice,
     required this.imageUrl,
+    this.description = '',
   });
 }
+
+const List<String> kSambalOptions = [
+  'Sambal Bawang',
+  'Sambal Matah',
+  'Sambal Tomat',
+  'Sambal Ijo',
+];
 
 class OrderItem {
   final MenuItemData menuItem;
   int quantity;
+  List<String?> sambalPerPortion;
 
   OrderItem({
     required this.menuItem,
     required this.quantity,
-  });
+    List<String?>? sambalPerPortion,
+    String? defaultSambal,
+  }) : sambalPerPortion = sambalPerPortion ??
+            List<String?>.generate(
+              quantity,
+              (_) => defaultSambal,
+            );
 
   int get totalPrice => menuItem.price * quantity;
+
+  void syncPortions({String? defaultSambal}) {
+    if (sambalPerPortion.length < quantity) {
+      sambalPerPortion.addAll(
+        List<String?>.generate(
+          quantity - sambalPerPortion.length,
+          (_) => defaultSambal,
+        ),
+      );
+    } else if (sambalPerPortion.length > quantity) {
+      sambalPerPortion = sambalPerPortion.sublist(0, quantity);
+    }
+  }
 }
 
 class TransaksiPage extends StatefulWidget {
@@ -68,38 +98,95 @@ class _TransaksiPageState extends State<TransaksiPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialItemCounts != null) {
-      widget.initialItemCounts!.forEach((title, count) {
-        if (count > 0) {
-          final items = _allMenuItems.where((m) => m.title == title);
-          if (items.isNotEmpty) {
-            final item = items.first;
-            _orderedItems.add(
-              OrderItem(
-                menuItem: item,
-                quantity: count,
-              ),
-            );
-          }
-        }
-      });
+    final Map<String, int> counts = {};
+    if (widget.initialItemCounts != null && widget.initialItemCounts!.isNotEmpty) {
+      counts.addAll(widget.initialItemCounts!);
+    } else if (OrderStateService.hasActiveOrder) {
+      counts.addAll(OrderStateService.itemCounts);
     }
+
+    counts.forEach((title, count) {
+      if (count > 0) {
+        OrderStateService.setItemCount(title, count);
+        final items = _allMenuItems.where((m) => m.title == title);
+        if (items.isNotEmpty) {
+          final item = items.first;
+          final isGeprek = item.category.toLowerCase().contains('paket') ||
+              item.title.toLowerCase().contains('geprek');
+          final defaultSambal = isGeprek ? 'Sambal Bawang' : null;
+          final savedSambal = OrderStateService.getSambalChoices(title);
+          final orderItem = OrderItem(
+            menuItem: item,
+            quantity: count,
+            sambalPerPortion: savedSambal,
+            defaultSambal: defaultSambal,
+          );
+          _orderedItems.add(orderItem);
+          OrderStateService.setSambalChoices(
+            item.title,
+            orderItem.sambalPerPortion,
+          );
+        }
+      }
+    });
   }
 
   final List<MenuItemData> _allMenuItems = [
     MenuItemData(
       id: '1',
       title: 'Ayam Geprek Bakar + Es Teh',
-      category: 'Geprek Bakar',
+      category: 'Paket Menu',
       price: 18000,
       imageUrl: 'assets/images/geprek_bakar.jpg',
+      description: 'Nasi + Ayam Geprek Bakar + Es Teh',
     ),
     MenuItemData(
       id: '2',
       title: 'Ayam Geprek Biasa + Es Teh',
-      category: 'Geprek Biasa',
+      category: 'Paket Menu',
       price: 17000,
       imageUrl: 'assets/images/geprek_biasa.jpg',
+      description: 'Nasi + Ayam Geprek Biasa + Es Teh',
+    ),
+    MenuItemData(
+      id: '3',
+      title: 'Ayam Geprek Mozzarella + Es Teh',
+      category: 'Paket Menu',
+      price: 22000,
+      imageUrl: 'assets/images/geprek_mozzarella.jpg',
+      description: 'Paket ayam geprek krispi dengan lelehan keju mozzarella, nasi & es teh sepuasnya',
+    ),
+    MenuItemData(
+      id: '4',
+      title: 'Ayam Geprek (Tanpa Nasi)',
+      category: 'Tambahan',
+      price: 13000,
+      imageUrl: 'assets/images/geprek_tanpa_nasi.jpg',
+      description: 'Potongan ayam geprek krispi tanpa nasi',
+    ),
+    MenuItemData(
+      id: '5',
+      title: 'Tahu & Tempe Geprek',
+      category: 'Tambahan',
+      price: 6000,
+      imageUrl: 'assets/images/tahu_tempe.jpg',
+      description: 'Lauk pendamping tahu dan tempe goreng tepung krispi',
+    ),
+    MenuItemData(
+      id: '6',
+      title: 'Telur Krispi',
+      category: 'Tambahan',
+      price: 5000,
+      imageUrl: 'assets/images/telur_krispi.jpg',
+      description: 'Telur dadar goreng tepung renyah',
+    ),
+    MenuItemData(
+      id: '7',
+      title: 'Jamur Krispi',
+      category: 'Tambahan',
+      price: 7000,
+      imageUrl: 'assets/images/jamur_krispi.jpg',
+      description: 'Jamur tiram goreng tepung gurih dan renyah',
     ),
   ];
 
@@ -133,6 +220,192 @@ class _TransaksiPageState extends State<TransaksiPage> {
   int get _grandTotal => _subtotal;
 
 
+  void _showSambalPicker(OrderItem order, {int portionIndex = 0}) {
+    order.syncPortions();
+    final bool isMultiPortion = order.quantity > 1;
+    final currentSambal = (portionIndex < order.sambalPerPortion.length)
+        ? order.sambalPerPortion[portionIndex]
+        : null;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD1D5DB),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    const Icon(Icons.local_fire_department_rounded,
+                        color: Color(0xFFDC2626), size: 22),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: const Text(
+                        'Pilih Varian Sambal',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: textDark,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Menu: ${order.menuItem.title}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: subTextGrey,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...kSambalOptions.map((sambal) {
+                  final isSelected = currentSambal == sambal;
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        if (portionIndex < order.sambalPerPortion.length) {
+                          order.sambalPerPortion[portionIndex] = sambal;
+                        }
+                      });
+                      OrderStateService.setSambalChoices(
+                        order.menuItem.title,
+                        order.sambalPerPortion,
+                      );
+                      Navigator.pop(ctx);
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFFFEF2F2) : const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFFDC2626) : const Color(0xFFE5E7EB),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Text('🌶️', style: TextStyle(fontSize: 16)),
+                              const SizedBox(width: 10),
+                              Text(
+                                sambal,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                  color: isSelected ? const Color(0xFFDC2626) : textDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isSelected)
+                            const Icon(Icons.check_circle_rounded, color: Color(0xFFDC2626), size: 20),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (portionIndex < order.sambalPerPortion.length) {
+                        order.sambalPerPortion[portionIndex] = null;
+                      }
+                    });
+                    OrderStateService.setSambalChoices(
+                      order.menuItem.title,
+                      order.sambalPerPortion,
+                    );
+                    Navigator.pop(ctx);
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: currentSambal == null ? const Color(0xFFF3F4F6) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFFE5E7EB),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Tanpa Sambal',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: subTextGrey,
+                          ),
+                        ),
+                        if (currentSambal == null)
+                          const Icon(Icons.check_rounded, color: subTextGrey, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+                if (isMultiPortion) ...[
+                  const SizedBox(height: 10),
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          for (int k = 0; k < order.sambalPerPortion.length; k++) {
+                            order.sambalPerPortion[k] = currentSambal;
+                          }
+                        });
+                        OrderStateService.setSambalChoices(
+                          order.menuItem.title,
+                          order.sambalPerPortion,
+                        );
+                        Navigator.pop(ctx);
+                      },
+                      icon: const Icon(Icons.copy_all_rounded, size: 16, color: primaryGreen),
+                      label: const Text(
+                        'Samakan sambal ke semua item ini',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: primaryGreen,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showSuccessDialog({int? bayar, int? kembalian, String? catatan}) async {
     setState(() {
       _isTransactionCompleted = true;
@@ -144,13 +417,30 @@ class _TransaksiPageState extends State<TransaksiPage> {
         ? widget.currentKasir!
         : (savedKasir ?? 'Rian');
 
-    // Siapkan rincian item pesanan untuk database MariaDB
-    final itemsPayload = _orderedItems.map((item) => {
-      'name': item.menuItem.title,
-      'price': item.menuItem.price,
-      'quantity': item.quantity,
-      'subtotal': item.totalPrice,
-    }).toList();
+    // Siapkan rincian item pesanan untuk database MariaDB (mendukung sambal berbeda per porsi)
+    final List<Map<String, dynamic>> itemsPayload = [];
+    for (var item in _orderedItems) {
+      item.syncPortions();
+      final Map<String?, int> sambalCounts = {};
+      for (var s in item.sambalPerPortion) {
+        sambalCounts[s] = (sambalCounts[s] ?? 0) + 1;
+      }
+
+      sambalCounts.forEach((sambalOpt, qty) {
+        final map = <String, dynamic>{
+          'productId': int.tryParse(item.menuItem.id),
+          'name': item.menuItem.title,
+          'category': item.menuItem.category,
+          'price': item.menuItem.price,
+          'quantity': qty,
+          'subtotal': item.menuItem.price * qty,
+        };
+        if (sambalOpt != null && sambalOpt.trim().isNotEmpty) {
+          map['sambal'] = sambalOpt.trim();
+        }
+        itemsPayload.add(map);
+      });
+    }
 
     // Kirim pesanan ke backend MariaDB
     final apiResult = await ApiService.kirimPesanan(
@@ -216,6 +506,7 @@ class _TransaksiPageState extends State<TransaksiPage> {
               ),
               onPressed: () {
                 Navigator.pop(ctx);
+                OrderStateService.clearOrder();
                 setState(() {
                   _orderedItems.clear();
                 });
@@ -1090,10 +1381,13 @@ class _TransaksiPageState extends State<TransaksiPage> {
           else
             // Ordered Items List
             ..._orderedItems.map((order) {
+              order.syncPortions();
+              final isMulti = order.quantity > 1;
 
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Title & Price
@@ -1117,9 +1411,142 @@ class _TransaksiPageState extends State<TransaksiPage> {
                               color: subTextGrey,
                             ),
                           ),
+                          const SizedBox(height: 5),
+
+                          // Pilihan Sambal: Satuan atau Per-Porsi (Tampil Atas-Bawah)
+                          if (!isMulti)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Sambal: ',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: textDark,
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () => _showSambalPicker(order, portionIndex: 0),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3.5),
+                                      decoration: BoxDecoration(
+                                        color: order.sambalPerPortion[0] != null
+                                            ? const Color(0xFFFEF2F2)
+                                            : const Color(0xFFF9FAFB),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: order.sambalPerPortion[0] != null
+                                              ? const Color(0xFFFECACA)
+                                              : const Color(0xFFE5E7EB),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            order.sambalPerPortion[0] != null
+                                                ? '🌶️ ${order.sambalPerPortion[0]}'
+                                                : '+ Pilih Sambal',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: order.sambalPerPortion[0] != null
+                                                  ? const Color(0xFFDC2626)
+                                                  : const Color(0xFF6B7280),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Icon(
+                                            Icons.arrow_drop_down_rounded,
+                                            size: 14,
+                                            color: order.sambalPerPortion[0] != null
+                                                ? const Color(0xFFDC2626)
+                                                : const Color(0xFF9CA3AF),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            // Daftar Porsi untuk menu yang sama (disusun atas bawah per porsi)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: List.generate(order.quantity, (pIndex) {
+                                final pSambal = order.sambalPerPortion[pIndex];
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text(
+                                        'Sambal: ',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: textDark,
+                                        ),
+                                      ),
+                                      InkWell(
+                                        onTap: () => _showSambalPicker(order, portionIndex: pIndex),
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 3.5),
+                                          decoration: BoxDecoration(
+                                            color: pSambal != null
+                                                ? const Color(0xFFFEF2F2)
+                                                : const Color(0xFFF9FAFB),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: pSambal != null
+                                                  ? const Color(0xFFDC2626)
+                                                  : const Color(0xFFE5E7EB),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                pSambal != null ? '🌶️ $pSambal' : '+ Pilih Sambal',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: pSambal != null
+                                                      ? const Color(0xFFDC2626)
+                                                      : const Color(0xFF6B7280),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Icon(
+                                                Icons.arrow_drop_down_rounded,
+                                                size: 14,
+                                                color: pSambal != null
+                                                    ? const Color(0xFFDC2626)
+                                                    : const Color(0xFF9CA3AF),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ),
                         ],
                       ),
                     ),
+
+                    const SizedBox(width: 8),
 
                     // Quantity & Price
                     Row(

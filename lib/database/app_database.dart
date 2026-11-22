@@ -32,24 +32,50 @@ class AppDatabase extends _$AppDatabase {
   // Query Ambil Semua Produk
   Future<List<Product>> getAllProducts() => select(products).get();
 
-  // Inisialisasi awal produk jika belum ada data (seeding offline)
+  // Inisialisasi awal produk jika belum ada data (seeding offline 7 menu final)
   Future<void> seedInitialData() async {
     final existing = await getAllProducts();
     if (existing.isEmpty) {
-      await addProduct(
+      final initialMenus = [
         const ProductsCompanion(
           name: Value('Ayam Geprek Bakar + Es Teh'),
           price: Value(18000),
-          category: Value('Geprek Bakar'),
+          category: Value('Paket Menu'),
         ),
-      );
-      await addProduct(
         const ProductsCompanion(
           name: Value('Ayam Geprek Biasa + Es Teh'),
           price: Value(17000),
-          category: Value('Geprek Biasa'),
+          category: Value('Paket Menu'),
         ),
-      );
+        const ProductsCompanion(
+          name: Value('Ayam Geprek Mozzarella + Es Teh'),
+          price: Value(22000),
+          category: Value('Paket Menu'),
+        ),
+        const ProductsCompanion(
+          name: Value('Ayam Geprek (Tanpa Nasi)'),
+          price: Value(13000),
+          category: Value('Tambahan'),
+        ),
+        const ProductsCompanion(
+          name: Value('Tahu & Tempe Geprek'),
+          price: Value(6000),
+          category: Value('Tambahan'),
+        ),
+        const ProductsCompanion(
+          name: Value('Telur Krispi'),
+          price: Value(5000),
+          category: Value('Tambahan'),
+        ),
+        const ProductsCompanion(
+          name: Value('Jamur Krispi'),
+          price: Value(7000),
+          category: Value('Tambahan'),
+        ),
+      ];
+      for (var item in initialMenus) {
+        await addProduct(item);
+      }
     }
   }
 }
