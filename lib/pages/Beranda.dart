@@ -363,16 +363,6 @@ class _BerandaPageState extends State<BerandaPage> {
     setState(() {
       _itemCounts[name] = OrderStateService.getItemCount(name);
     });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$name ditambahkan ke pesanan!'),
-        duration: const Duration(milliseconds: 900),
-        backgroundColor: primaryGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
   }
 
   void _removeItem(String name) {
