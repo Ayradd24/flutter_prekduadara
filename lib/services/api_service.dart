@@ -5,10 +5,13 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Daftar kandidat endpoint backend statis:
-  // 1. localhost:5000 (Untuk USB adb reverse, Windows Desktop, dan Chrome)
-  // 2. 10.0.2.2:5000 (Untuk Android Emulator)
+  // 1. 127.0.0.1:5000 (Untuk USB adb reverse HP fisik Android, Windows Desktop, dan Chrome - bebas DNS lookup error)
+  // 2. localhost:5000
+  // 3. 10.0.2.2:5000 (Untuk Android Emulator)
   static final List<String> _staticCandidates = [
+    'http://127.0.0.1:5000/api',
     'http://localhost:5000/api',
+    'http://10.196.72.148:5000/api',
     'http://10.0.2.2:5000/api',
   ];
 
