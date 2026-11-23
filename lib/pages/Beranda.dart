@@ -963,48 +963,7 @@ class _BerandaPageState extends State<BerandaPage> {
             child: SizedBox(
               width: 76,
               height: 76,
-              child: imageUrl.isEmpty
-                  ? Container(
-                      color: const Color(0xFFF3F4F6),
-                      child: const Icon(
-                        Icons.fastfood_rounded,
-                        color: Color(0xFF9CA3AF),
-                        size: 32,
-                      ),
-                    )
-                  : imageUrl.startsWith('http')
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          cacheWidth: 160,
-                          cacheHeight: 160,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: const Color(0xFFE5E7EB),
-                              child: const Icon(
-                                Icons.fastfood_rounded,
-                                color: Color(0xFF9CA3AF),
-                                size: 32,
-                              ),
-                            );
-                          },
-                        )
-                      : Image.asset(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          cacheWidth: 160,
-                          cacheHeight: 160,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: const Color(0xFFE5E7EB),
-                              child: const Icon(
-                                Icons.fastfood_rounded,
-                                color: Color(0xFF9CA3AF),
-                                size: 32,
-                              ),
-                            );
-                          },
-                        ),
+              child: _buildFoodThumbnail(imageUrl),
             ),
           ),
           const SizedBox(width: 12),
@@ -1130,6 +1089,52 @@ class _BerandaPageState extends State<BerandaPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFoodThumbnail(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) {
+      return _buildFoodPlaceholder();
+    }
+
+    // 1. Asset lokal di dalam bundle Flutter
+    if (trimmed.startsWith('assets/')) {
+      return Image.asset(
+        trimmed,
+        fit: BoxFit.cover,
+        cacheWidth: 160,
+        cacheHeight: 160,
+        errorBuilder: (context, error, stackTrace) => _buildFoodPlaceholder(),
+      );
+    }
+
+    // 2. Gambar dari server backend (Network)
+    String networkUrl = trimmed;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      // Relative path dari backend, misal: /uploads/products/...
+      final origin = ApiService.baseUrl.replaceAll(RegExp(r'/api/?$'), '');
+      final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+      networkUrl = '$origin$cleanPath';
+    }
+
+    return Image.network(
+      networkUrl,
+      fit: BoxFit.cover,
+      cacheWidth: 160,
+      cacheHeight: 160,
+      errorBuilder: (context, error, stackTrace) => _buildFoodPlaceholder(),
+    );
+  }
+
+  Widget _buildFoodPlaceholder() {
+    return Container(
+      color: const Color(0xFFF3F4F6),
+      child: const Icon(
+        Icons.fastfood_rounded,
+        color: Color(0xFF9CA3AF),
+        size: 32,
       ),
     );
   }
