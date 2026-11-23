@@ -125,7 +125,7 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
       if (k != null && mounted) setState(() => _savedKasir = k);
     });
     _fetchTransactions();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted) {
         _fetchTransactions();
         _checkActiveSession();

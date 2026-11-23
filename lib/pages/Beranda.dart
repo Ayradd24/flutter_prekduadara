@@ -185,7 +185,7 @@ class _BerandaPageState extends State<BerandaPage> {
     _loadProductsFromDatabase();
     _loadCashiers();
     _fetchOmsetData();
-    _omsetTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _omsetTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted) {
         _fetchOmsetData();
         _checkActiveSession();
@@ -268,15 +268,21 @@ class _BerandaPageState extends State<BerandaPage> {
         cashier: _effectiveKasir,
       );
       if (mounted) {
-        setState(() {
-          _totalOmset = summary.totalOmset;
-          _totalCount = summary.totalCount;
-          _tunaiOmset = summary.tunaiOmset;
-          _tunaiCount = summary.tunaiCount;
-          _qrisOmset = summary.qrisOmset;
-          _qrisCount = summary.qrisCount;
-          _isLoadingOmset = false;
-        });
+        if (_totalOmset != summary.totalOmset ||
+            _totalCount != summary.totalCount ||
+            _tunaiOmset != summary.tunaiOmset ||
+            _qrisOmset != summary.qrisOmset ||
+            _isLoadingOmset) {
+          setState(() {
+            _totalOmset = summary.totalOmset;
+            _totalCount = summary.totalCount;
+            _tunaiOmset = summary.tunaiOmset;
+            _tunaiCount = summary.tunaiCount;
+            _qrisOmset = summary.qrisOmset;
+            _qrisCount = summary.qrisCount;
+            _isLoadingOmset = false;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching omset in Beranda: $e');
@@ -980,6 +986,8 @@ class _BerandaPageState extends State<BerandaPage> {
                       ? Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
+                          cacheWidth: 160,
+                          cacheHeight: 160,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
                               color: const Color(0xFFE5E7EB),
@@ -994,6 +1002,8 @@ class _BerandaPageState extends State<BerandaPage> {
                       : Image.asset(
                           imageUrl,
                           fit: BoxFit.cover,
+                          cacheWidth: 160,
+                          cacheHeight: 160,
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
                               color: const Color(0xFFE5E7EB),
