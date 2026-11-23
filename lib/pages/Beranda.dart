@@ -185,7 +185,7 @@ class _BerandaPageState extends State<BerandaPage> {
     _loadProductsFromDatabase();
     _loadCashiers();
     _fetchOmsetData();
-    _omsetTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _omsetTimer = Timer.periodic(const Duration(seconds: 8), (_) {
       if (mounted) {
         _fetchOmsetData();
         _checkActiveSession();
@@ -268,15 +268,21 @@ class _BerandaPageState extends State<BerandaPage> {
         cashier: _effectiveKasir,
       );
       if (mounted) {
-        setState(() {
-          _totalOmset = summary.totalOmset;
-          _totalCount = summary.totalCount;
-          _tunaiOmset = summary.tunaiOmset;
-          _tunaiCount = summary.tunaiCount;
-          _qrisOmset = summary.qrisOmset;
-          _qrisCount = summary.qrisCount;
-          _isLoadingOmset = false;
-        });
+        if (_totalOmset != summary.totalOmset ||
+            _totalCount != summary.totalCount ||
+            _tunaiOmset != summary.tunaiOmset ||
+            _qrisOmset != summary.qrisOmset ||
+            _isLoadingOmset) {
+          setState(() {
+            _totalOmset = summary.totalOmset;
+            _totalCount = summary.totalCount;
+            _tunaiOmset = summary.tunaiOmset;
+            _tunaiCount = summary.tunaiCount;
+            _qrisOmset = summary.qrisOmset;
+            _qrisCount = summary.qrisCount;
+            _isLoadingOmset = false;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching omset in Beranda: $e');
@@ -357,16 +363,6 @@ class _BerandaPageState extends State<BerandaPage> {
     setState(() {
       _itemCounts[name] = OrderStateService.getItemCount(name);
     });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$name ditambahkan ke pesanan!'),
-        duration: const Duration(milliseconds: 900),
-        backgroundColor: primaryGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
   }
 
   void _removeItem(String name) {
@@ -967,44 +963,7 @@ class _BerandaPageState extends State<BerandaPage> {
             child: SizedBox(
               width: 76,
               height: 76,
-              child: imageUrl.isEmpty
-                  ? Container(
-                      color: const Color(0xFFF3F4F6),
-                      child: const Icon(
-                        Icons.fastfood_rounded,
-                        color: Color(0xFF9CA3AF),
-                        size: 32,
-                      ),
-                    )
-                  : imageUrl.startsWith('http')
-                      ? Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: const Color(0xFFE5E7EB),
-                              child: const Icon(
-                                Icons.fastfood_rounded,
-                                color: Color(0xFF9CA3AF),
-                                size: 32,
-                              ),
-                            );
-                          },
-                        )
-                      : Image.asset(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: const Color(0xFFE5E7EB),
-                              child: const Icon(
-                                Icons.fastfood_rounded,
-                                color: Color(0xFF9CA3AF),
-                                size: 32,
-                              ),
-                            );
-                          },
-                        ),
+              child: _buildFoodThumbnail(imageUrl),
             ),
           ),
           const SizedBox(width: 12),
@@ -1130,6 +1089,52 @@ class _BerandaPageState extends State<BerandaPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFoodThumbnail(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) {
+      return _buildFoodPlaceholder();
+    }
+
+    // 1. Asset lokal di dalam bundle Flutter
+    if (trimmed.startsWith('assets/')) {
+      return Image.asset(
+        trimmed,
+        fit: BoxFit.cover,
+        cacheWidth: 160,
+        cacheHeight: 160,
+        errorBuilder: (context, error, stackTrace) => _buildFoodPlaceholder(),
+      );
+    }
+
+    // 2. Gambar dari server backend (Network)
+    String networkUrl = trimmed;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      // Relative path dari backend, misal: /uploads/products/...
+      final origin = ApiService.baseUrl.replaceAll(RegExp(r'/api/?$'), '');
+      final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+      networkUrl = '$origin$cleanPath';
+    }
+
+    return Image.network(
+      networkUrl,
+      fit: BoxFit.cover,
+      cacheWidth: 160,
+      cacheHeight: 160,
+      errorBuilder: (context, error, stackTrace) => _buildFoodPlaceholder(),
+    );
+  }
+
+  Widget _buildFoodPlaceholder() {
+    return Container(
+      color: const Color(0xFFF3F4F6),
+      child: const Icon(
+        Icons.fastfood_rounded,
+        color: Color(0xFF9CA3AF),
+        size: 32,
       ),
     );
   }
