@@ -6,16 +6,33 @@ import 'package:http/http.dart' as http;
 class ApiService {
   // Daftar kandidat endpoint backend statis:
   // 1. 127.0.0.1:5000 (Untuk USB adb reverse HP fisik Android, Windows Desktop, dan Chrome - bebas DNS lookup error)
-  // 2. localhost:5000
-  // 3. 10.0.2.2:5000 (Untuk Android Emulator)
+  // 2. IP Wi-Fi Laptop aktif (untuk koneksi HP nirkabel / tanpa kabel USB)
+  // 3. localhost:5000
+  // 4. 10.0.2.2:5000 (Untuk Android Emulator)
   static final List<String> _staticCandidates = [
     'http://127.0.0.1:5000/api',
-    'http://localhost:5000/api',
+    'http://10.112.21.148:5000/api',
     'http://10.196.72.148:5000/api',
+    'http://localhost:5000/api',
     'http://10.0.2.2:5000/api',
   ];
 
   static String? _workingBaseUrl;
+
+  /// Resolusikan URL gambar (jika relatif seperti /uploads/products/xxx) ke URL absolut aktif
+  static String resolveImageUrl(String? rawUrl, [String? activeBaseUrl]) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return '';
+    final url = rawUrl.trim();
+    if (url.startsWith('assets/') ||
+        url.startsWith('http://') ||
+        url.startsWith('https://')) {
+      return url;
+    }
+    final base = activeBaseUrl ?? baseUrl;
+    final origin = base.replaceAll(RegExp(r'/api/?$'), '');
+    final cleanPath = url.startsWith('/') ? url : '/$url';
+    return '$origin$cleanPath';
+  }
 
   /// Dapatkan base URL yang aktif.
   /// Otomatis mendeteksi IP backend di jaringan Wi-Fi manapun.

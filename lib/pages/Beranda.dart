@@ -306,6 +306,7 @@ class _BerandaPageState extends State<BerandaPage> {
       // 1. Ambil dari endpoint publik backend MariaDB (/api/products)
       final apiProducts = await ApiService.ambilDaftarProduk();
       if (mounted && apiProducts.isNotEmpty) {
+        final activeBase = await ApiService.getBaseUrl();
         setState(() {
           _menuProducts = apiProducts.map((p) {
             final name = p['name']?.toString() ?? '';
@@ -327,6 +328,9 @@ class _BerandaPageState extends State<BerandaPage> {
               } else if (lower.contains('jamur')) {
                 img = 'assets/images/jamur_krispi.jpg';
               }
+            } else if (img.startsWith('/uploads/') || img.startsWith('uploads/')) {
+              // Langsung resolusikan relative path backend ke URL absolut aktif
+              img = ApiService.resolveImageUrl(img, activeBase);
             }
             return ProductMenuItem(
               id: p['id']?.toString() ?? '',
@@ -1111,20 +1115,17 @@ class _BerandaPageState extends State<BerandaPage> {
     }
 
     // 2. Gambar dari server backend (Network)
-    String networkUrl = trimmed;
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      // Relative path dari backend, misal: /uploads/products/...
-      final origin = ApiService.baseUrl.replaceAll(RegExp(r'/api/?$'), '');
-      final cleanPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
-      networkUrl = '$origin$cleanPath';
-    }
+    final networkUrl = ApiService.resolveImageUrl(trimmed);
 
     return Image.network(
       networkUrl,
       fit: BoxFit.cover,
       cacheWidth: 160,
       cacheHeight: 160,
-      errorBuilder: (context, error, stackTrace) => _buildFoodPlaceholder(),
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('⚠️ Gagal memuat gambar menu ($networkUrl): $error');
+        return _buildFoodPlaceholder();
+      },
     );
   }
 
