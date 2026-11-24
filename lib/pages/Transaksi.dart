@@ -448,6 +448,8 @@ class _TransaksiPageState extends State<TransaksiPage> {
       paymentMethod: _paymentMethod,
       cashier: kasirName,
       items: itemsPayload,
+      cashReceived: _paymentMethod == 'Tunai' ? bayar : null,
+      changeAmount: _paymentMethod == 'Tunai' ? kembalian : null,
     );
 
     if (!mounted) return;

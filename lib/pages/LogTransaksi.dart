@@ -298,6 +298,22 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             }
           }
 
+          // Parse uang tunai yang diterima dan kembalian
+          final int parsedCash = int.tryParse(
+                  tx['cashReceived']?.toString() ??
+                      tx['cash_received']?.toString() ??
+                      tx['bayar']?.toString() ??
+                      '') ??
+              (method == 'TUNAI' ? amount : 0);
+          final int parsedChange = int.tryParse(
+                  tx['changeAmount']?.toString() ??
+                      tx['change_amount']?.toString() ??
+                      tx['kembalian']?.toString() ??
+                      '') ??
+              (method == 'TUNAI'
+                  ? (parsedCash > amount ? parsedCash - amount : 0)
+                  : 0);
+
           parsedList.add(TransactionItem(
             id: id,
             time: tx['time']?.toString() ?? '12:00',
@@ -308,8 +324,8 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             totalAmount: amount,
             subtotal: amount,
             tax: 0,
-            cashReceived: amount,
-            change: 0,
+            cashReceived: parsedCash,
+            change: parsedChange,
             details: details,
             isToday: isTxToday,
             isCurrentShift: isTxCurrentShift,
@@ -1364,12 +1380,12 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   const SizedBox(height: 8),
 
                   // Breakdown Uang Tunai / Status QRIS
-                  if (trx.paymentMethod == 'TUNAI') ...[
+                  if (trx.paymentMethod.toUpperCase().contains('TUNAI')) ...[
                     _buildDetailRow(
-                      label: 'Uang Diterima (Tunai)',
+                      label: 'Uang dari Pelanggan',
                       value: _formatCurrency(trx.cashReceived),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     _buildDetailRow(
                       label: 'Uang Kembalian',
                       value: _formatCurrency(trx.change),

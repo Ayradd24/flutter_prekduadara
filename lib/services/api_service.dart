@@ -11,10 +11,11 @@ class ApiService {
   // 4. 10.0.2.2:5000 (Untuk Android Emulator)
   static final List<String> _staticCandidates = [
     'http://127.0.0.1:5000/api',
+    'http://10.200.178.25:5000/api',
     'http://10.112.21.148:5000/api',
     'http://10.196.72.148:5000/api',
-    'http://localhost:5000/api',
     'http://10.0.2.2:5000/api',
+    'http://localhost:5000/api',
   ];
 
   static String? _workingBaseUrl;
@@ -162,6 +163,8 @@ class ApiService {
     required String paymentMethod,
     String? cashier,
     required List<Map<String, dynamic>> items,
+    int? cashReceived,
+    int? changeAmount,
   }) async {
     final activeBase = await getBaseUrl();
 
@@ -169,12 +172,19 @@ class ApiService {
 
     try {
       final url = Uri.parse('$activeBase/transactions');
-      final payload = jsonEncode({
+      final Map<String, dynamic> bodyMap = {
         'total': total,
         'paymentMethod': paymentMethod,
         'cashier': cashier ?? 'Kasir Prek Dua Dara',
         'items': items,
-      });
+      };
+      if (cashReceived != null) {
+        bodyMap['cashReceived'] = cashReceived;
+      }
+      if (changeAmount != null) {
+        bodyMap['changeAmount'] = changeAmount;
+      }
+      final payload = jsonEncode(bodyMap);
 
       final response = await http
           .post(
