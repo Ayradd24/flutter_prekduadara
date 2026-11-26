@@ -144,11 +144,20 @@ class ApiService {
     required int total,
     required String paymentMethod,
     String? cashier,
+    int? cashReceived,
+    int? changeAmount,
     required List<Map<String, dynamic>> items,
   }) async {
     final activeBase = await getBaseUrl();
 
     String lastError = 'Koneksi ke backend gagal';
+
+    final isQris = paymentMethod.toUpperCase().contains('QRIS');
+    final int effectiveCashReceived = isQris ? total : (cashReceived ?? total);
+    final int effectiveChangeAmount = isQris
+        ? 0
+        : (changeAmount ??
+            (effectiveCashReceived > total ? effectiveCashReceived - total : 0));
 
     try {
       final url = Uri.parse('$activeBase/transactions');
@@ -156,6 +165,9 @@ class ApiService {
         'total': total,
         'paymentMethod': paymentMethod,
         'cashier': cashier ?? 'Kasir Prek Dua Dara',
+        'cash_received': effectiveCashReceived,
+        'amount_paid': effectiveCashReceived,
+        'change_amount': effectiveChangeAmount,
         'items': items,
       });
 

@@ -298,6 +298,30 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             }
           }
 
+          int? parseOptionalInt(dynamic raw) {
+            if (raw == null) return null;
+            if (raw is int) return raw;
+            if (raw is num) return raw.toInt();
+            return int.tryParse(raw.toString());
+          }
+
+          final int? rawCashReceived =
+              parseOptionalInt(tx['cash_received']) ??
+              parseOptionalInt(tx['amount_paid']) ??
+              parseOptionalInt(tx['cashReceived']) ??
+              parseOptionalInt(tx['amountPaid']);
+          final int? rawChangeAmount =
+              parseOptionalInt(tx['change_amount']) ??
+              parseOptionalInt(tx['changeAmount']) ??
+              parseOptionalInt(tx['change']);
+
+          final int cashReceivedVal =
+              method == 'QRIS' ? amount : (rawCashReceived ?? amount);
+          final int changeVal = method == 'QRIS'
+              ? 0
+              : (rawChangeAmount ??
+                  (cashReceivedVal > amount ? cashReceivedVal - amount : 0));
+
           parsedList.add(TransactionItem(
             id: id,
             time: tx['time']?.toString() ?? '12:00',
@@ -308,8 +332,8 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
             totalAmount: amount,
             subtotal: amount,
             tax: 0,
-            cashReceived: amount,
-            change: 0,
+            cashReceived: cashReceivedVal,
+            change: changeVal,
             details: details,
             isToday: isTxToday,
             isCurrentShift: isTxCurrentShift,
@@ -384,24 +408,155 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
   }
 
   void _handleReprintReceipt(TransactionItem trx) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+        title: Column(
           children: [
-            const Icon(Icons.print_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Mencetak ulang struk ${trx.id}... Struk berhasil dicetak!',
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            const Text(
+              'PREK DUA DARA',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: textDark,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Struk ${trx.id} • ${trx.date ?? ''} ${trx.time}',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: subTextGrey,
+              ),
+            ),
+            Text(
+              trx.cashier,
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: subTextGrey,
               ),
             ),
           ],
         ),
-        duration: const Duration(seconds: 2),
-        backgroundColor: primaryGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Divider(height: 16, thickness: 1, color: Color(0xFFE5E7EB)),
+              ...trx.details.map(
+                (d) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          d.sambal != null && d.sambal!.trim().isNotEmpty
+                              ? '${d.quantity}x ${d.name} (${d.sambal})'
+                              : '${d.quantity}x ${d.name}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: textDark,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatCurrency(d.price * d.quantity),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(height: 16, thickness: 1, color: Color(0xFFE5E7EB)),
+              _buildDetailRow(
+                label: 'TOTAL BAYAR',
+                value: _formatCurrency(trx.totalAmount),
+                isBold: true,
+              ),
+              const SizedBox(height: 6),
+              if (trx.paymentMethod == 'TUNAI') ...[
+                _buildDetailRow(
+                  label: 'Uang Diterima (Tunai)',
+                  value: _formatCurrency(trx.cashReceived),
+                ),
+                const SizedBox(height: 4),
+                _buildDetailRow(
+                  label: 'Uang Kembalian',
+                  value: _formatCurrency(trx.change),
+                  highlightValue: true,
+                ),
+              ] else ...[
+                _buildDetailRow(
+                  label: 'Metode Pembayaran',
+                  value: 'QRIS (${_formatCurrency(trx.cashReceived)})',
+                ),
+                const SizedBox(height: 4),
+                _buildDetailRow(
+                  label: 'Kembalian',
+                  value: _formatCurrency(0),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Tutup', style: TextStyle(color: subTextGrey)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryGreen,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.print_rounded, color: Colors.white, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          trx.paymentMethod == 'TUNAI'
+                              ? 'Struk ${trx.id} dicetak (Tunai: ${_formatCurrency(trx.cashReceived)}, Kembali: ${_formatCurrency(trx.change)})'
+                              : 'Struk ${trx.id} dicetak (QRIS: ${_formatCurrency(trx.totalAmount)})',
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  duration: const Duration(seconds: 3),
+                  backgroundColor: primaryGreen,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              );
+            },
+            icon: const Icon(Icons.print_rounded, size: 17),
+            label: const Text('Cetak Struk', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

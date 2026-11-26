@@ -442,11 +442,20 @@ class _TransaksiPageState extends State<TransaksiPage> {
       });
     }
 
+    final bool isQris = _paymentMethod.toUpperCase().contains('QRIS');
+    final int cashReceivedVal = isQris ? _grandTotal : (bayar ?? _grandTotal);
+    final int changeAmountVal = isQris
+        ? 0
+        : (kembalian ??
+            (cashReceivedVal > _grandTotal ? cashReceivedVal - _grandTotal : 0));
+
     // Kirim pesanan ke backend MariaDB
     final apiResult = await ApiService.kirimPesanan(
       total: _grandTotal,
       paymentMethod: _paymentMethod,
       cashier: kasirName,
+      cashReceived: cashReceivedVal,
+      changeAmount: changeAmountVal,
       items: itemsPayload,
     );
 
@@ -947,7 +956,10 @@ class _TransaksiPageState extends State<TransaksiPage> {
                     ),
                     onPressed: () {
                       Navigator.pop(ctx);
-                      _showSuccessDialog();
+                      _showSuccessDialog(
+                        bayar: _grandTotal,
+                        kembalian: 0,
+                      );
                     },
                     child: const FittedBox(
                       fit: BoxFit.scaleDown,
