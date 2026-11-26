@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'database/app_database.dart';
 import 'pages/SplashScreen.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,6 +12,9 @@ void main() async {
   } catch (e) {
     debugPrint('Gagal inisialisasi database: $e');
   }
+
+  // Inisialisasi notifikasi sistem Android (heads-up banner & notification bar)
+  await NotificationService.init();
 
   runApp(const MyApp());
 }

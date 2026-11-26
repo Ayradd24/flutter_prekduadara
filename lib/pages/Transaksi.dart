@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../widget/app_drawer.dart';
 import 'Beranda.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import '../services/order_state_service.dart';
 import '../services/settings_service.dart';
 
@@ -458,6 +459,23 @@ class _TransaksiPageState extends State<TransaksiPage> {
       changeAmount: changeAmountVal,
       items: itemsPayload,
     );
+
+    if (apiResult['success'] == true) {
+      final dynamic savedData = apiResult['data'];
+      final String rawTrxId =
+          (savedData is Map ? savedData['id']?.toString() : null) ??
+          'TRX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      final String receiptNumber =
+          rawTrxId.startsWith('#') ? rawTrxId : '#$rawTrxId';
+
+      await NotificationService.showPaymentSuccessNotification(
+        receiptNumber: receiptNumber,
+        paymentMethod: _paymentMethod,
+        totalAmount: _grandTotal,
+        cashReceived: cashReceivedVal,
+        changeAmount: changeAmountVal,
+      );
+    }
 
     if (!mounted) return;
 
