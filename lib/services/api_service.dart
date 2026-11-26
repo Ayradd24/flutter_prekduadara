@@ -11,6 +11,7 @@ class ApiService {
   // 4. 10.0.2.2:5000 (Untuk Android Emulator)
   static final List<String> _staticCandidates = [
     'http://127.0.0.1:5000/api',
+    'http://192.168.10.120:5000/api',
     'http://10.200.178.25:5000/api',
     'http://10.112.21.148:5000/api',
     'http://10.196.72.148:5000/api',
@@ -162,13 +163,20 @@ class ApiService {
     required int total,
     required String paymentMethod,
     String? cashier,
-    required List<Map<String, dynamic>> items,
     int? cashReceived,
     int? changeAmount,
+    required List<Map<String, dynamic>> items,
   }) async {
     final activeBase = await getBaseUrl();
 
     String lastError = 'Koneksi ke backend gagal';
+
+    final isQris = paymentMethod.toUpperCase().contains('QRIS');
+    final int effectiveCashReceived = isQris ? total : (cashReceived ?? total);
+    final int effectiveChangeAmount = isQris
+        ? 0
+        : (changeAmount ??
+            (effectiveCashReceived > total ? effectiveCashReceived - total : 0));
 
     try {
       final url = Uri.parse('$activeBase/transactions');
@@ -176,6 +184,9 @@ class ApiService {
         'total': total,
         'paymentMethod': paymentMethod,
         'cashier': cashier ?? 'Kasir Prek Dua Dara',
+        'cash_received': effectiveCashReceived,
+        'amount_paid': effectiveCashReceived,
+        'change_amount': effectiveChangeAmount,
         'items': items,
       };
       if (cashReceived != null) {

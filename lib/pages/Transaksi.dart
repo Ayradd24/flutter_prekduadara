@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../widget/app_drawer.dart';
 import 'Beranda.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import '../services/order_state_service.dart';
 import '../services/settings_service.dart';
 
@@ -14,6 +15,62 @@ const Color ribbonOrange = Color(0xFFE57E25);
 const Color textDark = Color(0xFF111111);
 const Color cardGrey = Color(0xFFE5E7EB);
 const Color subTextGrey = Color(0xFF6B7280);
+
+/// Custom formatter pemisah ribuan (titik `.` setiap 3 digit dari kanan)
+/// dengan penghapusan nol di depan dan penjagaan posisi kursor.
+class RibuanInputFormatter extends TextInputFormatter {
+  static String formatDigits(String raw) {
+    final digitsOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    final trimmed = digitsOnly.replaceFirst(RegExp(r'^0+'), '');
+    if (trimmed.isEmpty) return '';
+    return trimmed.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+  }
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final rawText = newValue.text;
+    final selectionEnd = newValue.selection.end.clamp(0, rawText.length);
+
+    final digitsAll = rawText.replaceAll(RegExp(r'[^0-9]'), '');
+    final trimmedLength = digitsAll.replaceFirst(RegExp(r'^0+'), '').length;
+    final leadingZeros = digitsAll.length - trimmedLength;
+
+    final digitsBeforeCursorRaw = rawText
+        .substring(0, selectionEnd)
+        .replaceAll(RegExp(r'[^0-9]'), '')
+        .length;
+    final targetDigitIndex =
+        (digitsBeforeCursorRaw - leadingZeros).clamp(0, trimmedLength);
+
+    final formatted = formatDigits(rawText);
+    if (formatted.isEmpty) {
+      return const TextEditingValue(
+        text: '',
+        selection: TextSelection.collapsed(offset: 0),
+      );
+    }
+
+    int cursorOffset = 0;
+    int seenDigits = 0;
+    while (cursorOffset < formatted.length && seenDigits < targetDigitIndex) {
+      if (formatted[cursorOffset] != '.') {
+        seenDigits++;
+      }
+      cursorOffset++;
+    }
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: cursorOffset),
+    );
+  }
+}
 
 class MenuItemData {
   final String id;
@@ -442,15 +499,39 @@ class _TransaksiPageState extends State<TransaksiPage> {
       });
     }
 
+    final bool isQris = _paymentMethod.toUpperCase().contains('QRIS');
+    final int cashReceivedVal = isQris ? _grandTotal : (bayar ?? _grandTotal);
+    final int changeAmountVal = isQris
+        ? 0
+        : (kembalian ??
+            (cashReceivedVal > _grandTotal ? cashReceivedVal - _grandTotal : 0));
+
     // Kirim pesanan ke backend MariaDB
     final apiResult = await ApiService.kirimPesanan(
       total: _grandTotal,
       paymentMethod: _paymentMethod,
       cashier: kasirName,
+      cashReceived: cashReceivedVal,
+      changeAmount: changeAmountVal,
       items: itemsPayload,
-      cashReceived: _paymentMethod == 'Tunai' ? bayar : null,
-      changeAmount: _paymentMethod == 'Tunai' ? kembalian : null,
     );
+
+    if (apiResult['success'] == true) {
+      final dynamic savedData = apiResult['data'];
+      final String rawTrxId =
+          (savedData is Map ? savedData['id']?.toString() : null) ??
+          'TRX-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      final String receiptNumber =
+          rawTrxId.startsWith('#') ? rawTrxId : '#$rawTrxId';
+
+      await NotificationService.showPaymentSuccessNotification(
+        receiptNumber: receiptNumber,
+        paymentMethod: _paymentMethod,
+        totalAmount: _grandTotal,
+        cashReceived: cashReceivedVal,
+        changeAmount: changeAmountVal,
+      );
+    }
 
     if (!mounted) return;
 
@@ -598,6 +679,10 @@ class _TransaksiPageState extends State<TransaksiPage> {
                     TextField(
                       controller: bayarController,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        RibuanInputFormatter(),
+                      ],
                       autofocus: true,
                       style: const TextStyle(
                         fontSize: 16,
@@ -949,7 +1034,10 @@ class _TransaksiPageState extends State<TransaksiPage> {
                     ),
                     onPressed: () {
                       Navigator.pop(ctx);
-                      _showSuccessDialog();
+                      _showSuccessDialog(
+                        bayar: _grandTotal,
+                        kembalian: 0,
+                      );
                     },
                     child: const FittedBox(
                       fit: BoxFit.scaleDown,
