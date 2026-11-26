@@ -309,10 +309,12 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
               parseOptionalInt(tx['cash_received']) ??
               parseOptionalInt(tx['amount_paid']) ??
               parseOptionalInt(tx['cashReceived']) ??
-              parseOptionalInt(tx['amountPaid']);
+              parseOptionalInt(tx['amountPaid']) ??
+              parseOptionalInt(tx['bayar']);
           final int? rawChangeAmount =
               parseOptionalInt(tx['change_amount']) ??
               parseOptionalInt(tx['changeAmount']) ??
+              parseOptionalInt(tx['kembalian']) ??
               parseOptionalInt(tx['change']);
 
           final int cashReceivedVal =
@@ -1519,12 +1521,12 @@ class _LogTransaksiPageState extends State<LogTransaksiPage> {
                   const SizedBox(height: 8),
 
                   // Breakdown Uang Tunai / Status QRIS
-                  if (trx.paymentMethod == 'TUNAI') ...[
+                  if (trx.paymentMethod.toUpperCase().contains('TUNAI')) ...[
                     _buildDetailRow(
-                      label: 'Uang Diterima (Tunai)',
+                      label: 'Uang dari Pelanggan',
                       value: _formatCurrency(trx.cashReceived),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     _buildDetailRow(
                       label: 'Uang Kembalian',
                       value: _formatCurrency(trx.change),
